@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Model Router"
+  short_description: "Route coding work to the least costly suitable model tier."
+  default_prompt: "Use $codex-model-router to assess this coding task and choose an efficient model, reasoning, and context strategy."
