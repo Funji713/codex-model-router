@@ -1,4 +1,4 @@
 interface:
   display_name: "Codex Model Router"
   short_description: "Route coding work to the least costly suitable model tier."
-  default_prompt: "Use $codex-model-router to classify this technical task and directly route execution to the least costly suitable Codex model, reasoning effort, and context budget."
+  default_prompt: "Use $codex-model-router to classify this technical task, spawn one execution subtask at the least costly suitable Codex model and reasoning effort, then report its completed result to this parent task."

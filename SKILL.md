@@ -1,25 +1,27 @@
 ---
 name: codex-model-router
-description: When the user explicitly invokes $codex-model-router to execute a technical task, classify coding, debugging, repository analysis, implementation, architecture, refactor, test, API integration, and AI/ML engineering work, then directly route execution to the least costly suitable Codex model tier and reasoning effort. Use only when the user expects automatic model routing, not merely an explanation or recommendation.
+description: When the user explicitly invokes $codex-model-router to execute a technical task, classify coding, debugging, repository analysis, implementation, architecture, refactor, test, API integration, and AI/ML engineering work, then spawn a subtask at the least costly suitable Codex model and reasoning effort. The parent task receives and reports the completed subtask result. Use only when the user expects automatic routed execution, not merely an explanation or recommendation.
 ---
 
 # Codex Model Router
 
 ## Goal
 
-Complete the task reliably with the least expensive combination of model capability, reasoning effort, context, and retries. Directly route execution rather than merely recommending a setting. Prioritize correctness and reliability over cost or speed.
+Complete the task reliably with the least expensive combination of model capability, reasoning effort, context, and retries. Directly route execution through a selected subtask rather than merely recommending a setting. Prioritize correctness and reliability over cost or speed.
 
 Use this skill with the domain skill that explains how to do the work. This skill decides the smallest justified capability and context budget; it does not replace `surgical-coding-debug`, `project-architecture-workflow`, test guidance, framework guidance, or security guidance.
 
 ## Runtime Contract
 
-Treat routing capability as dynamic. Inspect the tools and model choices available in the current host before routing a task.
+Treat routing capability as dynamic. Inspect the subtask tools and model choices available in the current host before routing a task.
 
 - Activate only when the user explicitly invokes `$codex-model-router` or explicitly requests automatic model routing and execution. That request authorizes a routed task for the supplied work; do not implicitly route ordinary coding requests.
-- If the host exposes an in-place current-task model and reasoning configuration operation, use it and then execute the task in the current task.
-- Otherwise, if the host can create a separate task or subagent with model and reasoning overrides, create one in the matching project, workspace, or worktree context. Pass it the original task, essential acceptance criteria, selected model, selected reasoning effort, and only the minimum context already gathered. The routed task performs the work; do not duplicate implementation in the parent task.
-- Never claim a model was changed, a task ran, or routing occurred unless the actual tool call succeeded. Report the created task identifier and selected settings after success.
-- If neither direct route is available, stop before implementation and report that the host cannot perform the requested automatic routing. Do not fall back to advisory execution unless the user explicitly permits it.
+- If the host can spawn a subtask with model and reasoning overrides, use that operation. Select the current host's identifier and reasoning enum that correspond to the policy tier.
+- Spawn exactly one execution subtask with `fork_context: false` unless the smallest necessary prior context cannot be restated. Pass the original task, essential acceptance criteria, selected model tier and reasoning level, workspace or project constraints, and the minimum already-gathered evidence. Do not pass a full conversation merely for convenience.
+- Require the subtask to own implementation and validation. Its final report must include completion status, changed paths or produced artifacts, validation commands and results, known limitations, and a concise handoff for the parent task.
+- The parent task waits only when it needs the completed result, reviews the returned result or change artifact, then reports the outcome to the user. Do not duplicate the implementation in the parent task. Close the completed subtask after its result has been captured.
+- Never claim a subtask ran or routing occurred unless the spawn operation and completion result succeeded. Report the subtask identifier and selected settings after success.
+- If the host cannot spawn a selected subtask, stop before implementation and report that automatic routing is unavailable. Do not fall back to advisory execution unless the user explicitly permits it.
 - Respect an explicit user model or reasoning choice. It overrides automatic selection for that route.
 
 Read [routing-policy.md](references/routing-policy.md) before a non-trivial classification. Use [route_task.py](scripts/route_task.py) when a deterministic score or a testable execution route is useful; it validates policy only and does not itself call host tools.
@@ -30,8 +32,9 @@ Read [routing-policy.md](references/routing-policy.md) before a non-trivial clas
 2. For each phase, classify scope, reasoning, ambiguity, dependencies, risk, and context need. Do not infer complexity from prompt length or changed-file count alone.
 3. Apply the score, override rules, and phase rules from `routing-policy.md`.
 4. Start with Minimum Required Context: target files, then direct callers or imports, then the related module, then repository-wide search only when earlier stages cannot resolve a material unknown.
-5. Select the lowest suitable current-host model and reasoning identifiers, then invoke the available direct-routing operation. Prefer one routed task that owns the work over parallel duplication.
-6. Verify the routing tool result before reporting success. If it fails, report the concrete failure and do not continue implementation in the parent task.
+5. Select the lowest suitable current-host model and reasoning identifiers, then spawn one subtask. Prefer one subtask that owns the work over parallel duplication.
+6. Wait only for the needed completion result. Review the subtask report or returned change artifact, then report the result from the parent task.
+7. If spawning or completion fails, report the concrete failure and do not continue implementation in the parent task.
 
 ## Tier Defaults
 
@@ -50,7 +53,7 @@ Do not turn this table into a rigid mapping. Apply the large-but-mechanical and 
 
 - Treat command errors, missing packages, permissions, bad test setup, and syntax mistakes as execution failures. Fix the execution issue; do not raise model tier or reasoning effort.
 - Before escalating a reasoning failure, first check whether evidence or context is missing. Do not replace missing callers, error traces, schemas, contracts, or tests with deeper reasoning.
-- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, route a follow-up task one appropriate tier higher. Do not retry unchanged hypotheses indefinitely.
+- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, close the completed subtask and route one follow-up subtask at an appropriate higher tier. Do not retry unchanged hypotheses indefinitely.
 - De-escalate once the uncertain phase is complete. Architecture analysis can require Sol and high reasoning while implementation against an approved plan can use Terra and medium; deterministic cleanup can use Luna or Terra and low.
 
 ## Task-Specific Routing
@@ -65,11 +68,11 @@ Do not turn this table into a rigid mapping. Apply the large-but-mechanical and 
 Keep classification details internal. Report actual routing concisely:
 
 ```text
-Routed to a new task: Sol + High reasoning. It will investigate the ambiguous multi-module root cause and implement the verified fix.
+Subtask `agent_...` completed using Sol + High reasoning. It changed `...`, passed `...`, and returned the following limitation: `...`.
 ```
 
 ```text
-Automatic routing is unavailable in this host, so I stopped before execution rather than run the task using an unselected model.
+This host cannot spawn a subtask with the selected model settings, so I stopped before execution rather than run the task using an unselected model.
 ```
 
 ## Avoid
@@ -79,5 +82,6 @@ Automatic routing is unavailable in this host, so I stopped before execution rat
 - Escalating because many files need the same mechanical change.
 - Staying at a high tier after the hard planning or investigation phase is complete.
 - Re-reading unchanged files or repeating already rejected hypotheses.
-- Executing the routed task in the parent after creating a routed task.
-- Treating a failed or unavailable host route as a successful model switch.
+- Executing the routed work in the parent after spawning its subtask.
+- Passing the entire parent conversation when a compact handoff is sufficient.
+- Treating a failed or unavailable subtask route as a successful model switch.

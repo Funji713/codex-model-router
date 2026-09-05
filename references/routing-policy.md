@@ -2,14 +2,26 @@
 
 ## Capability Modes
 
-The router has two direct-execution modes. It does not use advisory fallback by default.
+The router has one direct-execution mode. It does not use advisory fallback by default.
 
 | Mode | When to use it | Result |
 | --- | --- | --- |
-| In-place | The host exposes a successful current-task operation that sets model and reasoning. | Set the selected settings, then execute in the current task. |
-| Delegated | The host can create a separate task or subagent with selected model and reasoning, and the user explicitly invoked automatic routing. | Create exactly the needed task in the matching project context; that task executes the work. |
+| Subtask | The host can spawn a subtask with selected model and reasoning, and the user explicitly invoked automatic routing. | Spawn exactly one execution subtask using a compact handoff. The subtask implements and validates; the parent reviews its result and reports it. |
 
-If neither route is available, stop and report unavailable automatic routing. Never silently execute at an unselected setting or imply a switch occurred.
+If subtask routing is unavailable, stop and report unavailable automatic routing. Never silently execute at an unselected setting or imply a switch occurred.
+
+## Parent And Subtask Contract
+
+The parent performs classification and sends only the task, acceptance criteria, selected settings, relevant project constraints, and minimum evidence. The execution subtask owns implementation and validation.
+
+The subtask final response must include:
+
+1. Completion status and a concise result.
+2. Changed file paths or produced artifacts.
+3. Validation commands and their results.
+4. Remaining risk, limitation, or required user action.
+
+The parent waits for the result only when needed, reviews the returned work, reports the outcome, and closes the subtask. It must not repeat the implementation.
 
 ## Complexity Score
 
@@ -59,7 +71,7 @@ Do not inventory the entire repository, reread unchanged files, dump verbose too
 | --- | --- |
 | Command, environment, dependency, or permissions failure | Fix the execution condition. Do not escalate model tier by itself. |
 | Missing information | Acquire the smallest missing context or ask one focused question. |
-| Two meaningful failed reasoning attempts after relevant context is present | Create a follow-up route one tier or reasoning level higher, and state the evidence. |
+| Two meaningful failed reasoning attempts after relevant context is present | Close the completed subtask, then create one follow-up subtask one tier or reasoning level higher and state the evidence. |
 | Risk emerges during implementation | Pause irreversible work, reassess scope and validation, then raise tier only if the analysis requires it. |
 | Architecture phase is complete | De-escalate implementation to Terra when the contract is clear. |
 | Implementation is mechanical and bounded | De-escalate final edits or test updates to Luna where host capability permits. |
@@ -81,6 +93,6 @@ Keep this record internal unless the user asks for it:
 ```text
 phase=<triage|analysis|design|implementation|verification>
 score=<0-24>; tier=<Luna|Terra|Sol|Astra candidate>; reasoning=<Low|Medium|High|Extra-high>
-context=<target|direct-dependencies|module|repository>; mode=<in-place|delegated|blocked>
+context=<target|direct-dependencies|module|repository>; mode=<subtask|blocked>
 next=<single evidence-based next action>
 ```

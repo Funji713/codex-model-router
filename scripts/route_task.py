@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic policy checker for direct codex-model-router execution routes."""
+"""Deterministic policy checker for codex-model-router subtask routes."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class RouteInput:
     execution_failure: bool = False
     missing_context: bool = False
     reasoning_failures: int = 0
-    routing_capability: str = "delegated"
+    routing_capability: str = "subtask"
 
     @property
     def score(self) -> int:
@@ -93,15 +93,13 @@ def route_task(task: RouteInput) -> dict[str, object]:
     mode = task.routing_capability
     if mode == "unavailable":
         action = "stop: automatic routing is unavailable"
-    elif mode == "in-place":
-        action = "set the current task model and reasoning, then execute"
     else:
-        action = "create a selected routed task, then execute there"
+        action = "spawn a selected execution subtask, then report its completed result to the parent"
 
     if task.execution_failure:
         action = "recover execution conditions in the routed task"
     elif task.missing_context:
-        action = "acquire minimal missing context before creating the routed task"
+        action = "acquire minimal missing context before spawning the execution subtask"
 
     return {
         "mode": mode,
@@ -125,7 +123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execution-failure", action="store_true")
     parser.add_argument("--missing-context", action="store_true")
     parser.add_argument("--reasoning-failures", type=int, default=0)
-    parser.add_argument("--routing-capability", choices=("in-place", "delegated", "unavailable"), default="delegated")
+    parser.add_argument("--routing-capability", choices=("subtask", "unavailable"), default="subtask")
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args()
 
@@ -140,14 +138,14 @@ def run_self_test() -> None:
         (RouteInput(1, 2, 2, 1, 2, 2, reasoning_failures=2), "Sol", "High"),
         (RouteInput(4, 3, 1, 3, 3, 3, phase="implementation"), "Terra", "Medium"),
         (RouteInput(1, 1, 1, 1, 1, 1, execution_failure=True), "Terra", "Medium"),
-        (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="in-place"), "Terra", "Medium"),
+        (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="subtask"), "Terra", "Medium"),
         (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="unavailable"), "Terra", "Medium"),
     )
     for task, expected_tier, expected_reasoning in cases:
         result = route_task(task)
         assert result["recommended_tier"] == expected_tier, result
         assert result["recommended_reasoning"] == expected_reasoning, result
-    assert route_task(cases[-2][0])["mode"] == "in-place"
+    assert route_task(cases[-2][0])["mode"] == "subtask"
     assert route_task(cases[-1][0])["action"] == "stop: automatic routing is unavailable"
     print(f"self-test passed: {len(cases)} routing cases")
 
