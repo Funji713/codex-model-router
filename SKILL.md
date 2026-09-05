@@ -1,6 +1,6 @@
 ---
 name: codex-model-router
-description: When the user explicitly invokes $codex-model-router to execute a technical task, classify coding, debugging, repository analysis, implementation, architecture, refactor, test, API integration, and AI/ML engineering work, then spawn a subtask at the least costly suitable Codex model and reasoning effort. The parent task receives and reports the completed subtask result. Use only when the user expects automatic routed execution, not merely an explanation or recommendation.
+description: When a technical task needs execution, automatically classify coding, debugging, repository analysis, implementation, architecture, refactor, test, API integration, and AI/ML engineering work, then spawn a subtask at the least costly suitable Codex model and reasoning effort. The parent task receives and reports the completed subtask result. Use for execution tasks, including explicit $codex-model-router requests; do not route merely informational explanations or recommendations.
 ---
 
 # Codex Model Router
@@ -15,7 +15,7 @@ Use this skill with the domain skill that explains how to do the work. This skil
 
 Treat routing capability as dynamic. Inspect the subtask tools and model choices available in the current host before routing a task.
 
-- Activate only when the user explicitly invokes `$codex-model-router` or explicitly requests automatic model routing and execution. That request authorizes a routed task for the supplied work; do not implicitly route ordinary coding requests.
+- Activate by default when the current request needs execution of a technical task. An explicit `$codex-model-router` request is also sufficient. This default applies across conversations for users who install the skill; do not require them to repeat the invocation. Do not route merely informational explanations or recommendations.
 - If the host can spawn a subtask with model and reasoning overrides, use that operation. Select the current host's identifier and reasoning enum that correspond to the policy tier.
 - Spawn exactly one execution subtask with `fork_context: false` unless the smallest necessary prior context cannot be restated. Pass the original task, essential acceptance criteria, selected model tier and reasoning level, workspace or project constraints, and the minimum already-gathered evidence. Do not pass a full conversation merely for convenience.
 - Require the subtask to own implementation and validation. Its final report must include completion status, changed paths or produced artifacts, validation commands and results, known limitations, and a concise handoff for the parent task.

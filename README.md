@@ -16,11 +16,11 @@ To update an existing installation:
 git -C "$env:USERPROFILE\.codex\skills\codex-model-router" pull --ff-only
 ```
 
-Start a new Codex task after installation if the current task does not discover the skill.
+Start a new Codex task after installation if the current task does not discover the skill. Once discovered, the skill is eligible for automatic invocation across conversations whenever a request needs technical execution.
 
 ## Use
 
-Explicitly invoke it with the task that should be routed:
+The skill automatically routes requests that need technical execution. You can also explicitly invoke it with the task that should be routed:
 
 ```text
 $codex-model-router Investigate the failing checkout integration, implement the smallest verified fix, and run the focused tests.
