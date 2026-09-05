@@ -1,27 +1,28 @@
 ---
 name: codex-model-router
-description: Classify coding, debugging, repository analysis, implementation, architecture, refactor, test, API integration, and AI/ML engineering tasks to recommend the least costly suitable Codex model tier, reasoning effort, and context strategy. Use to prevent unnecessary model escalation, broad repository reads, repeated failed attempts, and overthinking. Do not use for non-technical writing or tasks where model selection is irrelevant.
+description: When the user explicitly invokes $codex-model-router to execute a technical task, classify coding, debugging, repository analysis, implementation, architecture, refactor, test, API integration, and AI/ML engineering work, then directly route execution to the least costly suitable Codex model tier and reasoning effort. Use only when the user expects automatic model routing, not merely an explanation or recommendation.
 ---
 
 # Codex Model Router
 
 ## Goal
 
-Complete the task reliably with the least expensive combination of model capability, reasoning effort, context, and retries. Prioritize correctness and reliability over cost or speed.
+Complete the task reliably with the least expensive combination of model capability, reasoning effort, context, and retries. Directly route execution rather than merely recommending a setting. Prioritize correctness and reliability over cost or speed.
 
 Use this skill with the domain skill that explains how to do the work. This skill decides the smallest justified capability and context budget; it does not replace `surgical-coding-debug`, `project-architecture-workflow`, test guidance, framework guidance, or security guidance.
 
 ## Runtime Contract
 
-Treat routing capability as dynamic. Inspect the tools and model choices available in the current host before proposing a route.
+Treat routing capability as dynamic. Inspect the tools and model choices available in the current host before routing a task.
 
-- A skill cannot change the model or reasoning effort of the current task unless the host explicitly exposes that operation.
-- A separate task or subagent may support model and reasoning overrides, but create or configure one only when the user explicitly authorizes that delegation for the current task.
-- Never claim a model was changed, a subagent ran, or routing occurred unless the actual tool call succeeded.
-- When direct routing is unavailable or unauthorized, use advisory mode: recommend the smallest suitable model and reasoning effort only when the current setup is insufficient or a clear downgrade opportunity exists.
-- Respect an explicit user model or reasoning choice. Warn once if it creates a material reliability risk, then continue as requested.
+- Activate only when the user explicitly invokes `$codex-model-router` or explicitly requests automatic model routing and execution. That request authorizes a routed task for the supplied work; do not implicitly route ordinary coding requests.
+- If the host exposes an in-place current-task model and reasoning configuration operation, use it and then execute the task in the current task.
+- Otherwise, if the host can create a separate task or subagent with model and reasoning overrides, create one in the matching project, workspace, or worktree context. Pass it the original task, essential acceptance criteria, selected model, selected reasoning effort, and only the minimum context already gathered. The routed task performs the work; do not duplicate implementation in the parent task.
+- Never claim a model was changed, a task ran, or routing occurred unless the actual tool call succeeded. Report the created task identifier and selected settings after success.
+- If neither direct route is available, stop before implementation and report that the host cannot perform the requested automatic routing. Do not fall back to advisory execution unless the user explicitly permits it.
+- Respect an explicit user model or reasoning choice. It overrides automatic selection for that route.
 
-Read [routing-policy.md](references/routing-policy.md) before a non-trivial classification. Use [route_task.py](scripts/route_task.py) when a deterministic score or a testable recommendation is useful; it is an advisory calculator, not a model-switching mechanism.
+Read [routing-policy.md](references/routing-policy.md) before a non-trivial classification. Use [route_task.py](scripts/route_task.py) when a deterministic score or a testable execution route is useful; it validates policy only and does not itself call host tools.
 
 ## Route The Task
 
@@ -29,7 +30,8 @@ Read [routing-policy.md](references/routing-policy.md) before a non-trivial clas
 2. For each phase, classify scope, reasoning, ambiguity, dependencies, risk, and context need. Do not infer complexity from prompt length or changed-file count alone.
 3. Apply the score, override rules, and phase rules from `routing-policy.md`.
 4. Start with Minimum Required Context: target files, then direct callers or imports, then the related module, then repository-wide search only when earlier stages cannot resolve a material unknown.
-5. Execute silently when the current model and reasoning are sufficient. Give a concise recommendation only for a necessary upgrade, a meaningful de-escalation, or an explicitly requested route explanation.
+5. Select the lowest suitable current-host model and reasoning identifiers, then invoke the available direct-routing operation. Prefer one routed task that owns the work over parallel duplication.
+6. Verify the routing tool result before reporting success. If it fails, report the concrete failure and do not continue implementation in the parent task.
 
 ## Tier Defaults
 
@@ -48,7 +50,7 @@ Do not turn this table into a rigid mapping. Apply the large-but-mechanical and 
 
 - Treat command errors, missing packages, permissions, bad test setup, and syntax mistakes as execution failures. Fix the execution issue; do not raise model tier or reasoning effort.
 - Before escalating a reasoning failure, first check whether evidence or context is missing. Do not replace missing callers, error traces, schemas, contracts, or tests with deeper reasoning.
-- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, recommend one appropriate escalation. Do not retry unchanged hypotheses indefinitely.
+- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, route a follow-up task one appropriate tier higher. Do not retry unchanged hypotheses indefinitely.
 - De-escalate once the uncertain phase is complete. Architecture analysis can require Sol and high reasoning while implementation against an approved plan can use Terra and medium; deterministic cleanup can use Luna or Terra and low.
 
 ## Task-Specific Routing
@@ -60,17 +62,15 @@ Do not turn this table into a rigid mapping. Apply the large-but-mechanical and 
 
 ## User-Facing Messages
 
-Keep routing decisions internal by default. Use one concise message only when a user action is needed:
+Keep classification details internal. Report actual routing concisely:
 
 ```text
-Recommended model: Sol + High reasoning - the root cause remains ambiguous across multiple modules after targeted investigation.
+Routed to a new task: Sol + High reasoning. It will investigate the ambiguous multi-module root cause and implement the verified fix.
 ```
 
 ```text
-The architecture is settled; the remaining deterministic work can continue with Terra + Medium reasoning to save usage.
+Automatic routing is unavailable in this host, so I stopped before execution rather than run the task using an unselected model.
 ```
-
-If the user elects to continue with the current setup, continue without repeated warnings.
 
 ## Avoid
 
@@ -79,4 +79,5 @@ If the user elects to continue with the current setup, continue without repeated
 - Escalating because many files need the same mechanical change.
 - Staying at a high tier after the hard planning or investigation phase is complete.
 - Re-reading unchanged files or repeating already rejected hypotheses.
-- Confusing a recommendation with a successful model switch or delegated run.
+- Executing the routed task in the parent after creating a routed task.
+- Treating a failed or unavailable host route as a successful model switch.
