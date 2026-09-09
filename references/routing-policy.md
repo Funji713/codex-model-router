@@ -12,7 +12,7 @@ If subtask routing is unavailable, stop and report unavailable automatic routing
 
 ## Parent And Subtask Contract
 
-The parent performs classification and sends only the task, acceptance criteria, selected settings, relevant project constraints, and minimum evidence. The execution subtask owns implementation and validation.
+The parent performs classification and sends only `ROUTED_EXECUTION_SUBTASK: true`, the task, acceptance criteria, selected settings, relevant project constraints, and minimum evidence. The execution subtask owns implementation and validation. On seeing the sentinel, it must execute locally rather than attempting to route a nested subtask.
 
 The subtask final response must include:
 

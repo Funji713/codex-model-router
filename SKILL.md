@@ -15,10 +15,14 @@ Use this skill with the domain skill that explains how to do the work. This skil
 
 Treat routing capability as dynamic. Inspect the subtask tools and model choices available in the current host before routing a task.
 
+### Execution-handoff sentinel
+
+The parent must prepend `ROUTED_EXECUTION_SUBTASK: true` to every spawned worker's handoff. This sentinel is definitive: when it is present, the receiving agent is already the selected execution subtask. It must skip all routing-capability checks, must not call `spawn_agent`, and must perform the assigned implementation and validation directly in its own workspace. It must not treat the absence of a nested spawning tool as a blocker.
+
 - Activate by default when the current request needs execution of a technical task. An explicit `$codex-model-router` request is also sufficient. This default applies across conversations for users who install the skill; do not require them to repeat the invocation. Do not route merely informational explanations or recommendations.
 - When already running as a subtask, do not route again. Own the assigned implementation and validation locally; recursive delegation is prohibited.
 - If the host can spawn a subtask with model and reasoning overrides, use that operation. Select the current host's identifier and reasoning enum that correspond to the policy tier.
-- Spawn exactly one execution subtask with `fork_context: false` unless the smallest necessary prior context cannot be restated. Pass the original task, essential acceptance criteria, selected model tier and reasoning level, workspace or project constraints, and the minimum already-gathered evidence. Do not pass a full conversation merely for convenience.
+- Spawn exactly one execution subtask with `fork_context: false` unless the smallest necessary prior context cannot be restated. Prepend the execution-handoff sentinel, then pass the original task, essential acceptance criteria, selected model tier and reasoning level, workspace or project constraints, and the minimum already-gathered evidence. Do not pass a full conversation merely for convenience.
 - Require the subtask to own implementation and validation. Its final report must include completion status, changed paths or produced artifacts, validation commands and results, known limitations, and a concise handoff for the parent task.
 - The parent task waits only when it needs the completed result, reviews the returned result or change artifact, then reports the outcome to the user. Do not duplicate the implementation in the parent task. Close the completed subtask after its result has been captured.
 - Never claim a subtask ran or routing occurred unless the spawn operation and completion result succeeded. Report the subtask identifier and selected settings after success.
