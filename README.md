@@ -26,7 +26,7 @@ The skill automatically routes requests that need technical execution. You can a
 $codex-model-router Investigate the failing checkout integration, implement the smallest verified fix, and run the focused tests.
 ```
 
-The parent task scores scope, reasoning, ambiguity, dependencies, risk, and context need. It opens one execution subtask with the chosen model and reasoning setting. That subtask owns implementation and validation, then returns changed paths, test results, and any remaining limitations to the parent.
+The parent task scores scope, reasoning, ambiguity, dependencies, risk, and context need. It chooses the lowest suitable available model: `gpt-6-luna` for mechanical work, `gpt-6.1-sol` for normal engineering, and `gpt-6-astra` only for exceptional, evidence-supported frontier work. `gpt-6-sol` and 5.x models are compatibility fallbacks, not automatic first choices. The execution subtask owns implementation and validation, then returns changed paths, test results, and any remaining limitations to the parent.
 
 If the current host cannot create a selected subtask, the skill stops rather than silently executing with an unselected model.
 

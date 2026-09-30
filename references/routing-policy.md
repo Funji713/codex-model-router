@@ -23,6 +23,18 @@ The subtask final response must include:
 
 The parent waits for the result only when needed, reviews the returned work, reports the outcome, and closes the subtask. It must not repeat the implementation.
 
+## Model Selection Order
+
+At the selected capability tier, choose the first available model in this order unless the user explicitly selects a model:
+
+| Capability tier | Preferred model | Fallbacks | Reasoning range |
+| --- | --- | --- | --- |
+| Mechanical | `gpt-6-luna` | `gpt-5.6-luna`, `gpt-6.1-sol` | Low; Medium only for bounded local analysis |
+| Workhorse | `gpt-6.1-sol` | `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra` | Medium by default; High for difficult but evidence-bounded work |
+| Frontier | `gpt-6-astra` | `gpt-6.1-sol` at High/ XHigh | High by default; XHigh, Max, or Ultra only after documented evidence that lower reasoning or the workhorse tier was insufficient |
+
+`gpt-5.5` is unsupported for automatic selection. It may be honored only when the user explicitly requests it. Never assume all listed models are present: inspect the host's current model identifiers and supported reasoning levels before spawning.
+
 ## Complexity Score
 
 Score each dimension from 0 to 4 using the evidence currently available.
@@ -36,12 +48,12 @@ Score each dimension from 0 to 4 using the evidence currently available.
 | Risk | Easily reversible | Behavior or data change | Security, migration, production, or irreversible risk |
 | Context | Target file supplied | Direct dependencies needed | History, architecture, or broad discovery required |
 
-| Total | Default tier | Reasoning default | Typical work |
+| Total | Default capability | Default model | Reasoning default | Typical work |
 | --- | --- | --- | --- |
-| 0-5 | Luna | Low | Formatting, one-file fix, narrow test update |
-| 6-12 | Terra | Medium | Normal feature, API endpoint, ordinary bug fix |
-| 13-19 | Sol | High | Root-cause analysis, architectural decision, multi-module refactor |
-| 20-24 | Sol, then Astra candidate only if justified | High, then Extra-high only if justified | Unfamiliar, high-risk, or genuinely novel system work |
+| 0-5 | Mechanical | `gpt-6-luna` | Low | Formatting, one-file fix, narrow test update |
+| 6-12 | Workhorse | `gpt-6.1-sol` | Medium | Normal feature, API endpoint, ordinary bug fix |
+| 13-19 | Workhorse | `gpt-6.1-sol` | High | Root-cause analysis, architectural decision, multi-module refactor |
+| 20-24 | Frontier candidate | `gpt-6.1-sol` High first; `gpt-6-astra` only if justified | High, then XHigh only if justified | Unfamiliar, high-risk, or genuinely novel system work |
 
 The score is a starting point, not a substitute for judgment.
 
@@ -49,9 +61,9 @@ The score is a starting point, not a substitute for judgment.
 
 | Situation | Route |
 | --- | --- |
-| Large but mechanical rename, migration, or generated edit | Luna with narrowly scoped tools and validation; use Terra only if contracts or failures make it necessary. |
-| Small but difficult concurrency, security, data-integrity, or algorithm issue | Sol with High reasoning even if few files are involved. |
-| Known framework convention with clear acceptance criteria | Prefer Terra; do not raise the tier merely because a framework is present. |
+| Large but mechanical rename, migration, or generated edit | `gpt-6-luna` with narrowly scoped tools and validation; use `gpt-6.1-sol` only if contracts or failures make it necessary. |
+| Small but difficult concurrency, security, data-integrity, or algorithm issue | `gpt-6.1-sol` High even if few files are involved; Astra needs evidence of exceptional complexity. |
+| Known framework convention with clear acceptance criteria | Prefer `gpt-6.1-sol` Medium; do not raise the model merely because a framework is present. |
 | User explicitly selects a model or reasoning effort | Honor it for the created or reconfigured route. |
 
 ## Minimum Required Context
@@ -71,20 +83,20 @@ Do not inventory the entire repository, reread unchanged files, dump verbose too
 | --- | --- |
 | Command, environment, dependency, or permissions failure | Fix the execution condition. Do not escalate model tier by itself. |
 | Missing information | Acquire the smallest missing context or ask one focused question. |
-| Two meaningful failed reasoning attempts after relevant context is present | Close the completed subtask, then create one follow-up subtask one tier or reasoning level higher and state the evidence. |
+| Two meaningful failed reasoning attempts after relevant context is present | Close the completed subtask. Raise `gpt-6.1-sol` from Medium to High first; select Astra only for a demonstrated model-capability gap, and state the evidence. |
 | Risk emerges during implementation | Pause irreversible work, reassess scope and validation, then raise tier only if the analysis requires it. |
-| Architecture phase is complete | De-escalate implementation to Terra when the contract is clear. |
-| Implementation is mechanical and bounded | De-escalate final edits or test updates to Luna where host capability permits. |
+| Architecture phase is complete | De-escalate implementation to `gpt-6.1-sol` Medium when the contract is clear. |
+| Implementation is mechanical and bounded | De-escalate final edits or test updates to `gpt-6-luna` Low where host capability permits. |
 
 ## Phase Routing
 
 | Phase | Preferred route |
 | --- | --- |
-| Triage and reproduction | Luna / Low for clear evidence; Terra / Medium if the failure spans a module. |
-| Root-cause analysis | Terra / Medium by default; Sol / High for multi-layer or unclear failures. |
-| Architecture and risk decisions | Sol / High when a real tradeoff exists; avoid Astra unless Sol has demonstrably insufficient capability. |
-| Implementation | Terra / Medium for ordinary changes; Luna / Low for bounded mechanical work. |
-| Focused verification | Luna / Low unless diagnosing a remaining non-obvious failure. |
+| Triage and reproduction | `gpt-6-luna` / Low for clear evidence; `gpt-6.1-sol` / Medium if the failure spans a module. |
+| Root-cause analysis | `gpt-6.1-sol` / Medium by default; High for multi-layer or unclear failures. |
+| Architecture and risk decisions | `gpt-6.1-sol` / High when a real tradeoff exists; use Astra only when `gpt-6.1-sol` has demonstrably insufficient capability. |
+| Implementation | `gpt-6.1-sol` / Medium for ordinary changes; `gpt-6-luna` / Low for bounded mechanical work. |
+| Focused verification | `gpt-6-luna` / Low unless diagnosing a remaining non-obvious failure. |
 
 ## Compact Internal Record
 
@@ -92,7 +104,7 @@ Keep this record internal unless the user asks for it:
 
 ```text
 phase=<triage|analysis|design|implementation|verification>
-score=<0-24>; tier=<Luna|Terra|Sol|Astra candidate>; reasoning=<Low|Medium|High|Extra-high>
+score=<0-24>; capability=<Mechanical|Workhorse|Frontier candidate>; model=<host identifier>; reasoning=<Low|Medium|High|XHigh|Max|Ultra>
 context=<target|direct-dependencies|module|repository>; mode=<subtask|blocked>
 next=<single evidence-based next action>
 ```

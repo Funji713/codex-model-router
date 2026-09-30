@@ -26,58 +26,88 @@ class RouteInput:
     missing_context: bool = False
     reasoning_failures: int = 0
     routing_capability: str = "subtask"
+    available_models: tuple[str, ...] = (
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+    )
+    frontier_justified: bool = False
 
     @property
     def score(self) -> int:
         return sum(getattr(self, dimension) for dimension in DIMENSIONS)
 
 
-def base_tier(score: int) -> str:
+def base_capability(score: int) -> str:
     if score <= 5:
-        return "Luna"
-    if score <= 12:
-        return "Terra"
+        return "Mechanical"
     if score <= 19:
-        return "Sol"
-    return "Astra candidate"
+        return "Workhorse"
+    return "Frontier candidate"
 
 
-def tier_reasoning(tier: str) -> str:
-    return {
-        "Luna": "Low",
-        "Terra": "Medium",
-        "Sol": "High",
-        "Astra candidate": "Extra-high",
-    }[tier]
+MODEL_PREFERENCES = {
+    "Mechanical": ("gpt-6-luna", "gpt-5.6-luna", "gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-terra"),
+    "Workhorse": ("gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-terra"),
+    "Frontier": ("gpt-6-astra", "gpt-6.1-sol"),
+}
+
+
+def select_model(capability: str, available_models: tuple[str, ...], frontier_justified: bool) -> str:
+    selection = (
+        "Frontier"
+        if capability == "Frontier candidate" and frontier_justified
+        else "Workhorse"
+        if capability == "Frontier candidate"
+        else capability
+    )
+    for model in MODEL_PREFERENCES[selection]:
+        if model in available_models:
+            return model
+    raise ValueError(f"no supported model is available for {selection}: {available_models}")
+
+
+def select_reasoning(task: RouteInput, capability: str) -> str:
+    if capability == "Mechanical":
+        return "Medium" if task.reasoning >= 2 and not task.large_mechanical else "Low"
+    if capability == "Frontier candidate":
+        return "XHigh" if task.frontier_justified else "High"
+    if task.phase == "implementation" and task.ambiguity <= 1 and not task.small_difficult:
+        return "Medium"
+    return "High" if task.small_difficult or task.reasoning >= 3 or task.score >= 13 else "Medium"
 
 
 def route_task(task: RouteInput) -> dict[str, object]:
-    tier = base_tier(task.score)
+    capability = base_capability(task.score)
     notes: list[str] = []
 
     if task.large_mechanical:
-        tier = "Luna"
+        capability = "Mechanical"
         notes.append("large mechanical work stays on the low tier with targeted validation")
     elif task.small_difficult:
-        tier = "Sol"
+        capability = "Workhorse"
         notes.append("small but difficult work overrides file-count assumptions")
 
     if task.execution_failure:
         notes.append("execution failure requires environment or dependency recovery, not model escalation")
     elif task.missing_context:
         notes.append("acquire the smallest missing context before escalating")
-    elif task.reasoning_failures >= 2 and tier == "Luna":
-        tier = "Terra"
+    elif task.reasoning_failures >= 2 and capability == "Mechanical":
+        capability = "Workhorse"
         notes.append("two meaningful reasoning failures justify one-tier escalation")
-    elif task.reasoning_failures >= 2 and tier == "Terra":
-        tier = "Sol"
-        notes.append("two meaningful reasoning failures justify one-tier escalation")
+    elif task.reasoning_failures >= 2 and capability == "Workhorse":
+        notes.append("two meaningful reasoning failures justify raising the workhorse reasoning before an Astra escalation")
 
-    if task.phase == "implementation" and task.ambiguity <= 1 and tier in {"Sol", "Astra candidate"}:
-        tier = "Terra"
+    if task.phase == "implementation" and task.ambiguity <= 1 and capability == "Frontier candidate":
+        capability = "Workhorse"
         notes.append("clear implementation de-escalates after analysis")
     elif task.phase == "verification" and task.score <= 12 and not task.small_difficult:
-        tier = "Luna"
+        capability = "Mechanical"
         notes.append("focused verification uses the low tier")
 
     context_level = (
@@ -101,12 +131,20 @@ def route_task(task: RouteInput) -> dict[str, object]:
     elif task.missing_context:
         action = "acquire minimal missing context before spawning the execution subtask"
 
+    model = select_model(capability, task.available_models, task.frontier_justified)
+    reasoning = select_reasoning(task, capability)
+    if capability == "Frontier candidate" and not task.frontier_justified:
+        notes.append("high score begins with gpt-6.1-sol; Astra requires explicit evidence of a workhorse capability gap")
+    elif model != "gpt-6-luna" and capability == "Mechanical":
+        notes.append("preferred Luna model is unavailable; selected the least-cost compatible fallback")
+
     return {
         "mode": mode,
         "phase": task.phase,
         "score": task.score,
-        "recommended_tier": tier,
-        "recommended_reasoning": tier_reasoning(tier),
+        "recommended_capability": capability,
+        "recommended_model": model,
+        "recommended_reasoning": reasoning,
         "context_strategy": context_level,
         "action": action,
         "notes": notes,
@@ -124,29 +162,37 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--missing-context", action="store_true")
     parser.add_argument("--reasoning-failures", type=int, default=0)
     parser.add_argument("--routing-capability", choices=("subtask", "unavailable"), default="subtask")
+    parser.add_argument("--available-models", default=",".join(RouteInput.available_models), help="comma-separated host model identifiers")
+    parser.add_argument("--frontier-justified", action="store_true", help="evidence supports selecting Astra for an exceptional task")
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args()
 
 
 def run_self_test() -> None:
     cases = (
-        (RouteInput(0, 0, 0, 0, 0, 0), "Luna", "Low"),
-        (RouteInput(1, 1, 1, 1, 2, 1), "Terra", "Medium"),
-        (RouteInput(3, 3, 2, 3, 3, 3), "Sol", "High"),
-        (RouteInput(4, 1, 0, 1, 1, 1, large_mechanical=True), "Luna", "Low"),
-        (RouteInput(0, 4, 3, 2, 3, 2, small_difficult=True), "Sol", "High"),
-        (RouteInput(1, 2, 2, 1, 2, 2, reasoning_failures=2), "Sol", "High"),
-        (RouteInput(4, 3, 1, 3, 3, 3, phase="implementation"), "Terra", "Medium"),
-        (RouteInput(1, 1, 1, 1, 1, 1, execution_failure=True), "Terra", "Medium"),
-        (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="subtask"), "Terra", "Medium"),
-        (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="unavailable"), "Terra", "Medium"),
+        (RouteInput(0, 0, 0, 0, 0, 0), "Mechanical", "gpt-6-luna", "Low"),
+        (RouteInput(1, 1, 1, 1, 2, 1), "Workhorse", "gpt-6.1-sol", "Medium"),
+        (RouteInput(3, 3, 2, 3, 3, 3), "Workhorse", "gpt-6.1-sol", "High"),
+        (RouteInput(4, 4, 4, 4, 4, 4), "Frontier candidate", "gpt-6.1-sol", "High"),
+        (RouteInput(4, 4, 4, 4, 4, 4, frontier_justified=True), "Frontier candidate", "gpt-6-astra", "XHigh"),
+        (RouteInput(4, 1, 0, 1, 1, 1, large_mechanical=True), "Mechanical", "gpt-6-luna", "Low"),
+        (RouteInput(0, 4, 3, 2, 3, 2, small_difficult=True), "Workhorse", "gpt-6.1-sol", "High"),
+        (RouteInput(1, 2, 2, 1, 2, 2, reasoning_failures=2), "Workhorse", "gpt-6.1-sol", "Medium"),
+        (RouteInput(4, 3, 1, 3, 3, 3, phase="implementation"), "Workhorse", "gpt-6.1-sol", "Medium"),
+        (RouteInput(1, 1, 1, 1, 1, 1, execution_failure=True), "Workhorse", "gpt-6.1-sol", "Medium"),
+        (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="subtask"), "Workhorse", "gpt-6.1-sol", "Medium"),
+        (RouteInput(1, 1, 1, 1, 1, 1, routing_capability="unavailable"), "Workhorse", "gpt-6.1-sol", "Medium"),
+        (RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-5.6-luna",)), "Mechanical", "gpt-5.6-luna", "Low"),
     )
-    for task, expected_tier, expected_reasoning in cases:
+    for task, expected_capability, expected_model, expected_reasoning in cases:
         result = route_task(task)
-        assert result["recommended_tier"] == expected_tier, result
+        assert result["recommended_capability"] == expected_capability, result
+        assert result["recommended_model"] == expected_model, result
         assert result["recommended_reasoning"] == expected_reasoning, result
-    assert route_task(cases[-2][0])["mode"] == "subtask"
-    assert route_task(cases[-1][0])["action"] == "stop: automatic routing is unavailable"
+    routed_task = next(task for task, *_ in cases if task.routing_capability == "subtask")
+    unavailable_task = next(task for task, *_ in cases if task.routing_capability == "unavailable")
+    assert route_task(routed_task)["mode"] == "subtask"
+    assert route_task(unavailable_task)["action"] == "stop: automatic routing is unavailable"
     print(f"self-test passed: {len(cases)} routing cases")
 
 
@@ -155,7 +201,14 @@ def main() -> None:
     if args.self_test:
         run_self_test()
         return
-    route_input = RouteInput(**{field: getattr(args, field) for field in RouteInput.__dataclass_fields__})
+    route_input = RouteInput(
+        **{
+            field: getattr(args, field)
+            for field in RouteInput.__dataclass_fields__
+            if field not in {"available_models"}
+        },
+        available_models=tuple(model.strip() for model in args.available_models.split(",") if model.strip()),
+    )
     print(json.dumps(route_task(route_input), indent=2))
 
 

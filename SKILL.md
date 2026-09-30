@@ -41,39 +41,40 @@ Read [routing-policy.md](references/routing-policy.md) before a non-trivial clas
 6. Wait only for the needed completion result. Review the subtask report or returned change artifact, then report the result from the parent task.
 7. If spawning or completion fails, report the concrete failure and do not continue implementation in the parent task.
 
-## Tier Defaults
+## Model Catalog And Defaults
 
-Use the current host's available model identifiers. The conceptual tiers are:
+Inspect the current host's choices at route time. Prefer the newest available family; never select a legacy identifier when its current-generation counterpart is available and suitable.
 
-| Tier | Default use | Reasoning default |
-| --- | --- | --- |
-| Luna | Clear, localized, mechanical, and reversible work | Low |
-| Terra | Normal engineering, Django/API work, integration, moderate debugging, and multi-file implementation | Medium |
-| Sol | Architecture, difficult unknown root causes, broad dependency analysis, or high-cost changes | High |
-| Astra | Last escalation for exceptional multi-system reasoning after a justified lower-tier attempt, or when explicitly required | Extra-high candidate |
+| Model identifier | Position | Default reasoning | Use it for |
+| --- | --- | --- | --- |
+| `gpt-6-luna` | Fast, low-cost execution | Low | Deterministic one-file edits, formatting, straightforward test changes, narrow verification, and bounded mechanical migrations. Use Medium only when the task remains well-bounded but needs a little local reasoning. |
+| `gpt-6.1-sol` | Default workhorse | Medium | Normal implementation, API and integration work, multi-file changes with known contracts, ordinary debugging, refactors, and code review fixes. Use High for genuinely non-obvious root causes or consequential design choices. |
+| `gpt-6-astra` | Frontier specialist | High | Novel multi-system reasoning, hard architecture or algorithm work, ambiguous failures that remain after evidence-based `gpt-6.1-sol` work, and unusually high-impact design decisions. Use XHigh or higher only with a written justification. |
+| `gpt-6-sol` | Previous-generation workhorse | Medium | Compatibility fallback only when `gpt-6.1-sol` is unavailable or a user explicitly requests it. Match the `gpt-6.1-sol` route but do not prefer it automatically. |
+| `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` | Legacy models | Match the closest current tier | Compatibility fallback only for a host that lacks the current-generation choices, or on explicit user request. Prefer `gpt-5.6-sol` for normal work, `gpt-5.6-luna` for mechanical work, and never select `gpt-5.5` automatically. |
 
-Do not turn this table into a rigid mapping. Apply the large-but-mechanical and small-but-difficult overrides before escalating.
+The policy tiers are **Luna** (`gpt-6-luna`), **Workhorse** (`gpt-6.1-sol`), and **Frontier** (`gpt-6-astra`). Do not treat model labels as a rigid mapping: apply large-but-mechanical and small-but-difficult overrides before escalating.
 
 ## Failure And Phase Control
 
 - Treat command errors, missing packages, permissions, bad test setup, and syntax mistakes as execution failures. Fix the execution issue; do not raise model tier or reasoning effort.
 - Before escalating a reasoning failure, first check whether evidence or context is missing. Do not replace missing callers, error traces, schemas, contracts, or tests with deeper reasoning.
-- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, close the completed subtask and route one follow-up subtask at an appropriate higher tier. Do not retry unchanged hypotheses indefinitely.
-- De-escalate once the uncertain phase is complete. Architecture analysis can require Sol and high reasoning while implementation against an approved plan can use Terra and medium; deterministic cleanup can use Luna or Terra and low.
+- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, close the completed subtask and route one follow-up subtask at an appropriate higher tier. First raise `gpt-6.1-sol` from Medium to High when the model remains suitable; move to `gpt-6-astra` only when the evidence shows a capability gap. Do not retry unchanged hypotheses indefinitely.
+- De-escalate once the uncertain phase is complete. Architecture analysis can require `gpt-6.1-sol` High or `gpt-6-astra`, while implementation against an approved plan generally uses `gpt-6.1-sol` Medium; deterministic cleanup can use `gpt-6-luna` Low.
 
 ## Task-Specific Routing
 
 - Route focused bug fixes through `surgical-coding-debug`. Reproduce, inspect the smallest relevant context, test the hypothesis, patch the proven cause, and validate narrowly.
-- Route architecture work through `project-architecture-workflow`. Use Sol only when the architecture, migration boundary, compatibility, or dependency risk actually warrants it; a small service addition is often Terra.
-- Treat normal Python, Django, Django REST Framework, FastAPI, REST API, JavaScript, HTML/CSS, Docker, database, standard inference API, and known-contract integration work as Terra by default, not Sol.
-- Treat AI/ML pipeline architecture, multi-model orchestration, model serving design, unexplained inference behavior, and complex training or inference dependencies as Sol candidates.
+- Route architecture work through `project-architecture-workflow`. Use `gpt-6.1-sol` High when the architecture, migration boundary, compatibility, or dependency risk warrants it; use `gpt-6-astra` only for exceptional tradeoffs or unresolved complexity. A small service addition is usually `gpt-6.1-sol` Medium.
+- Treat normal Python, Django, Django REST Framework, FastAPI, REST API, JavaScript, HTML/CSS, Docker, database, standard inference API, and known-contract integration work as `gpt-6.1-sol` Medium by default, not Astra.
+- Treat AI/ML pipeline architecture, multi-model orchestration, model serving design, unexplained inference behavior, and complex training or inference dependencies as `gpt-6.1-sol` High candidates; escalate to Astra only if the bounded evidence justifies it.
 
 ## User-Facing Messages
 
 Keep classification details internal. Report actual routing concisely:
 
 ```text
-Subtask `agent_...` completed using Sol + High reasoning. It changed `...`, passed `...`, and returned the following limitation: `...`.
+Subtask `agent_...` completed using `gpt-6.1-sol` + High reasoning. It changed `...`, passed `...`, and returned the following limitation: `...`.
 ```
 
 ```text
@@ -83,7 +84,7 @@ This host cannot spawn a subtask with the selected model settings, so I stopped 
 ## Avoid
 
 - Beginning with a full repository scan.
-- Defaulting normal work to Sol, Astra, High, or Extra-high reasoning.
+- Defaulting normal work to Astra, High, XHigh, Max, or Ultra reasoning.
 - Escalating because many files need the same mechanical change.
 - Staying at a high tier after the hard planning or investigation phase is complete.
 - Re-reading unchanged files or repeating already rejected hypotheses.
