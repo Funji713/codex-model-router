@@ -1,6 +1,6 @@
 # Codex Model Router
 
-Automatically classifies an explicitly routed technical task, then runs it in one selected Codex subtask with the least costly suitable model and reasoning effort. The parent task receives the subtask's validated handoff and reports the result.
+Automatically classifies requests requiring technical execution, then runs each phase in one selected Codex subtask with the least costly suitable model and reasoning effort. The parent task receives the subtask's validated handoff and reports the result. Informational explanations and recommendations do not activate routing.
 
 ## Install
 
@@ -26,11 +26,22 @@ The skill automatically routes requests that need technical execution. You can a
 $codex-model-router Investigate the failing checkout integration, implement the smallest verified fix, and run the focused tests.
 ```
 
-The parent task scores scope, reasoning, ambiguity, dependencies, risk, and context need. It chooses the lowest suitable available model: `gpt-6-luna` for mechanical work, `gpt-6.1-sol` for normal engineering, and `gpt-6-astra` only for exceptional, evidence-supported frontier work. `gpt-6-sol` and 5.x models are compatibility fallbacks, not automatic first choices. The execution subtask owns implementation and validation, then returns changed paths, test results, and any remaining limitations to the parent.
+The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need. Mechanical work uses `gpt-6-luna`; ordinary engineering uses `gpt-6.1-sol`. Complex work can directly select `gpt-6-astra` High at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. Prior Sol failures are not required; Astra never automatically implies XHigh. `gpt-6-sol` and 5.x models provide compatibility fallbacks. These thresholds are policy heuristics rather than benchmarked model-quality guarantees.
+
+Explicit user settings override automatic selection when the host supports them. The execution subtask implements and validates, then returns changed paths, test results, and limitations. Once the uncertain phase is complete, implementation against a settled plan returns to Workhorse Medium and bounded mechanical work can use Luna.
 
 If the current host cannot create a selected subtask, the skill stops rather than silently executing with an unselected model.
 
 See [SKILL.md](SKILL.md) for the routing contract and [routing-policy.md](references/routing-policy.md) for the scoring and escalation policy.
+
+The deterministic helper checks the policy without spawning workers. Supply observed host availability before acting on its recommendation:
+
+```powershell
+python scripts/route_task.py --self-test
+python scripts/route_task.py --scope 3 --reasoning 3 --ambiguity 2 --dependencies 3 --risk 2 --context 3 --available-models gpt-6.1-sol,gpt-6-astra --supported-reasoning '{"gpt-6.1-sol":["Medium","High"],"gpt-6-astra":["High","XHigh"]}'
+```
+
+The second example returns Astra High at score 16. For a smaller exceptional task, add `--frontier-justified --frontier-evidence "concrete rationale"`. User overrides use `--explicit-model` / `--explicit-reasoning`; `--informational` skips routing. Unsupported user settings or missing compatible models return a blocked route.
 
 ## Benchmark snapshot
 

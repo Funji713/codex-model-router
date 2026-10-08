@@ -22,9 +22,9 @@ The parent must prepend `ROUTED_EXECUTION_SUBTASK: true` to every spawned worker
 - Activate by default when the current request needs execution of a technical task. An explicit `$codex-model-router` request is also sufficient. This default applies across conversations for users who install the skill; do not require them to repeat the invocation. Do not route merely informational explanations or recommendations.
 - When already running as a subtask, do not route again. Own the assigned implementation and validation locally; recursive delegation is prohibited.
 - If the host can spawn a subtask with model and reasoning overrides, use that operation. Select the current host's identifier and reasoning enum that correspond to the policy tier.
-- Spawn exactly one execution subtask with `fork_context: false` unless the smallest necessary prior context cannot be restated. Prepend the execution-handoff sentinel, then pass the original task, essential acceptance criteria, selected model tier and reasoning level, workspace or project constraints, and the minimum already-gathered evidence. Do not pass a full conversation merely for convenience.
+- Spawn exactly one execution subtask at a time using the host's option for no inherited conversation (for `spawn_agent`, use `fork_turns: "none"`). Pass `model` and `reasoning_effort` explicitly when supported. Prepend the execution-handoff sentinel, then pass the original task, essential acceptance criteria, selected settings, workspace or project constraints, and the minimum already-gathered evidence.
 - Require the subtask to own implementation and validation. Its final report must include completion status, changed paths or produced artifacts, validation commands and results, known limitations, and a concise handoff for the parent task.
-- The parent task waits only when it needs the completed result, reviews the returned result or change artifact, then reports the outcome to the user. Do not duplicate the implementation in the parent task. Close the completed subtask after its result has been captured.
+- The parent task waits only when it needs the completed result, reviews the returned result or change artifact, then reports the outcome to the user. Do not duplicate the implementation in the parent task. Release the completed subtask if the host supports that operation.
 - Never claim a subtask ran or routing occurred unless the spawn operation and completion result succeeded. Report the subtask identifier and selected settings after success.
 - If the host cannot spawn a selected subtask, stop before implementation and report that automatic routing is unavailable. Do not fall back to advisory execution unless the user explicitly permits it.
 - Respect an explicit user model or reasoning choice. It overrides automatic selection for that route.
@@ -49,7 +49,7 @@ Inspect the current host's choices at route time. Prefer the newest available fa
 | --- | --- | --- | --- |
 | `gpt-6-luna` | Fast, low-cost execution | Low | Deterministic one-file edits, formatting, straightforward test changes, narrow verification, and bounded mechanical migrations. Use Medium only when the task remains well-bounded but needs a little local reasoning. |
 | `gpt-6.1-sol` | Default workhorse | Medium | Normal implementation, API and integration work, multi-file changes with known contracts, ordinary debugging, refactors, and code review fixes. Use High for genuinely non-obvious root causes or consequential design choices. |
-| `gpt-6-astra` | Frontier specialist | High | Novel multi-system reasoning, hard architecture or algorithm work, ambiguous failures that remain after evidence-based `gpt-6.1-sol` work, and unusually high-impact design decisions. Use XHigh or higher only with a written justification. |
+| `gpt-6-astra` | Complex reasoning specialist | High | Directly select for score 16+ with reasoning 3+ and ambiguity or dependencies 3+, or for a smaller task with documented exceptional complexity and reasoning 3+. Prior Sol failures are not required. XHigh or higher requires a separate written justification or an explicit user choice. |
 | `gpt-6-sol` | Previous-generation workhorse | Medium | Compatibility fallback only when `gpt-6.1-sol` is unavailable or a user explicitly requests it. Match the `gpt-6.1-sol` route but do not prefer it automatically. |
 | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` | Legacy models | Match the closest current tier | Compatibility fallback only for a host that lacks the current-generation choices, or on explicit user request. Prefer `gpt-5.6-sol` for normal work, `gpt-5.6-luna` for mechanical work, and never select `gpt-5.5` automatically. |
 
@@ -59,15 +59,15 @@ The policy tiers are **Luna** (`gpt-6-luna`), **Workhorse** (`gpt-6.1-sol`), and
 
 - Treat command errors, missing packages, permissions, bad test setup, and syntax mistakes as execution failures. Fix the execution issue; do not raise model tier or reasoning effort.
 - Before escalating a reasoning failure, first check whether evidence or context is missing. Do not replace missing callers, error traces, schemas, contracts, or tests with deeper reasoning.
-- After one or two meaningful, evidence-backed attempts at the same reasoning level fail, close the completed subtask and route one follow-up subtask at an appropriate higher tier. First raise `gpt-6.1-sol` from Medium to High when the model remains suitable; move to `gpt-6-astra` only when the evidence shows a capability gap. Do not retry unchanged hypotheses indefinitely.
+- After two meaningful, evidence-backed attempts at the same reasoning level fail, route one follow-up subtask at an appropriate higher setting. Raise Workhorse Medium to High when it remains suitable; select Astra directly whenever the complexity gate or a documented capability gap justifies it. Prior Sol attempts are an escalation signal, not a prerequisite for Astra. Do not retry unchanged hypotheses indefinitely.
 - De-escalate once the uncertain phase is complete. Architecture analysis can require `gpt-6.1-sol` High or `gpt-6-astra`, while implementation against an approved plan generally uses `gpt-6.1-sol` Medium; deterministic cleanup can use `gpt-6-luna` Low.
 
 ## Task-Specific Routing
 
 - Route focused bug fixes through `surgical-coding-debug`. Reproduce, inspect the smallest relevant context, test the hypothesis, patch the proven cause, and validate narrowly.
-- Route architecture work through `project-architecture-workflow`. Use `gpt-6.1-sol` High when the architecture, migration boundary, compatibility, or dependency risk warrants it; use `gpt-6-astra` only for exceptional tradeoffs or unresolved complexity. A small service addition is usually `gpt-6.1-sol` Medium.
+- Route architecture work through `project-architecture-workflow`. Use `gpt-6.1-sol` High for bounded architecture or migration decisions; directly select `gpt-6-astra` High when interacting contracts, unresolved tradeoffs, or novel reasoning meet the policy gate. A small service addition is usually `gpt-6.1-sol` Medium.
 - Treat normal Python, Django, Django REST Framework, FastAPI, REST API, JavaScript, HTML/CSS, Docker, database, standard inference API, and known-contract integration work as `gpt-6.1-sol` Medium by default, not Astra.
-- Treat AI/ML pipeline architecture, multi-model orchestration, model serving design, unexplained inference behavior, and complex training or inference dependencies as `gpt-6.1-sol` High candidates; escalate to Astra only if the bounded evidence justifies it.
+- Treat AI/ML pipeline architecture, multi-model orchestration, model serving design, and unexplained inference behavior according to observed complexity. Use Workhorse High for bounded analysis and Astra High directly when the policy gate is met.
 
 ## User-Facing Messages
 
