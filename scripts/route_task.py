@@ -11,9 +11,10 @@ DIMENSIONS = ("scope", "reasoning", "ambiguity", "dependencies", "risk", "contex
 PHASES = ("triage", "analysis", "design", "implementation", "verification")
 EFFORTS = ("Low", "Medium", "High", "XHigh", "Max", "Ultra")
 MODEL_PREFERENCES = {
-    "Mechanical": ("gpt-6-luna", "gpt-5.6-luna", "gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-terra"),
-    "Workhorse": ("gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-terra"),
-    "Frontier": ("gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol", "gpt-5.6-terra"),
+    "Mechanical": ("gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"),
+    "Scoped": ("gpt-6.1-terra", "gpt-6.1-sol"),
+    "Workhorse": ("gpt-6.1-sol", "gpt-6-sol"),
+    "Frontier": ("gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol"),
 }
 
 
@@ -28,6 +29,7 @@ class RouteInput:
     phase: str = "analysis"
     large_mechanical: bool = False
     small_difficult: bool = False
+    scoped_task: bool = False
     settled_plan: bool = False
     bounded_verification: bool = False
     execution_failure: bool = False
@@ -36,7 +38,7 @@ class RouteInput:
     routing_capability: str = "subtask"
     technical_execution: bool = True
     available_models: tuple[str, ...] = (
-        "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
+        "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
         "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
     )
     frontier_justified: bool = False
@@ -104,6 +106,8 @@ def select_reasoning(task: RouteInput, capability: str, escalating: bool) -> str
         return task.explicit_reasoning
     if capability == "Frontier" or task.explicit_model == "gpt-6-astra":
         return "High"
+    if capability == "Scoped":
+        return "Medium"
     if capability == "Mechanical":
         return "Medium" if task.reasoning >= 2 and not task.large_mechanical else "Low"
     if task.settled_plan and not task.small_difficult and not escalating:
@@ -142,6 +146,9 @@ def route_task(task: RouteInput) -> dict[str, object]:
     elif task.bounded_verification and not task.small_difficult:
         capability = "Mechanical"
         notes.append("explicitly bounded verification uses the low tier")
+    if task.scoped_task and capability == "Workhorse" and task.score <= 12 and task.reasoning < 3 and task.risk < 3 and not task.small_difficult and not task.settled_plan and task.reasoning_failures < 2:
+        capability = "Scoped"
+        notes.append("well-defined scoped code fix or visual workflow uses Terra with verification")
     escalating = task.reasoning_failures >= 2 and not (task.execution_failure or task.missing_context)
     if escalating:
         if capability == "Mechanical":
@@ -178,7 +185,7 @@ def parse_args() -> argparse.Namespace:
     for dimension in DIMENSIONS:
         parser.add_argument(f"--{dimension}", type=int, choices=range(5), default=0)
     parser.add_argument("--phase", choices=PHASES, default="analysis")
-    for flag in ("large-mechanical", "small-difficult", "settled-plan", "bounded-verification", "execution-failure", "missing-context", "frontier-justified"):
+    for flag in ("large-mechanical", "small-difficult", "scoped-task", "settled-plan", "bounded-verification", "execution-failure", "missing-context", "frontier-justified"):
         parser.add_argument(f"--{flag}", action="store_true")
     parser.add_argument("--reasoning-failures", type=int, default=0)
     parser.add_argument("--routing-capability", choices=("subtask", "unavailable"), default="subtask")
@@ -227,8 +234,11 @@ def run_self_test() -> None:
         ("explicit effort", replace(boundary, explicit_reasoning="XHigh"), "Frontier", "gpt-6-astra", "XHigh"),
         ("Astra fallback", replace(boundary, available_models=("gpt-6.1-sol",)), "Frontier", "gpt-6.1-sol", "High"),
         ("previous workhorse fallback", replace(boundary, available_models=("gpt-6-sol",)), "Frontier", "gpt-6-sol", "High"),
-        ("legacy fallback", replace(ordinary, available_models=("gpt-5.6-terra",)), "Workhorse", "gpt-5.6-terra", "Medium"),
-        ("Luna fallback", RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-5.6-luna",)), "Mechanical", "gpt-5.6-luna", "Low"),
+        ("scoped Terra", replace(ordinary, scoped_task=True), "Scoped", "gpt-6.1-terra", "Medium"),
+        ("scoped fallback", replace(ordinary, scoped_task=True, available_models=("gpt-6.1-sol",)), "Scoped", "gpt-6.1-sol", "Medium"),
+        ("scoped high risk", replace(ordinary, scoped_task=True, risk=3), "Workhorse", "gpt-6.1-sol", "Medium"),
+        ("scoped escalation", replace(ordinary, scoped_task=True, reasoning_failures=2), "Workhorse", "gpt-6.1-sol", "High"),
+        ("Luna Terra fallback", RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-6.1-terra",)), "Mechanical", "gpt-6.1-terra", "Low"),
         ("Luna workhorse fallback", RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-6.1-sol",)), "Mechanical", "gpt-6.1-sol", "Low"),
         ("explicit legacy", replace(ordinary, explicit_model="gpt-5.5"), "Workhorse", "gpt-5.5", "Medium"),
     )
@@ -242,7 +252,7 @@ def run_self_test() -> None:
         result = route_task(task)
         assert result["mode"] == "unavailable" and result["action"] == "stop: automatic routing is unavailable", result
         count += 1
-    for task in (replace(ordinary, available_models=()), replace(ordinary, available_models=("gpt-5.5",)), replace(ordinary, explicit_model="absent"), replace(boundary, supported_reasoning={"gpt-6-astra": ("Low",)}), replace(boundary, supported_reasoning={}), replace(boundary, explicit_reasoning="Ultra", supported_reasoning={"gpt-6-astra": ("High",)})):
+    for task in (replace(ordinary, available_models=()), replace(ordinary, available_models=("gpt-5.5",)), replace(ordinary, available_models=("gpt-5.6-terra",)), replace(ordinary, explicit_model="absent"), replace(boundary, supported_reasoning={"gpt-6-astra": ("Low",)}), replace(boundary, supported_reasoning={}), replace(boundary, explicit_reasoning="Ultra", supported_reasoning={"gpt-6-astra": ("High",)})):
         result = route_task(task)
         assert result["mode"] == "blocked" and result["action"].startswith("stop:"), result
         count += 1

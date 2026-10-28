@@ -20,11 +20,12 @@ Unless the user explicitly chooses a model, select the first available model in 
 
 | Tier | Model preference order | Automatic reasoning |
 | --- | --- | --- |
-| Mechanical | `gpt-6-luna`, `gpt-5.6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra` | Low; Medium for bounded local reasoning |
-| Workhorse | `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra` | Medium; High at score 13+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
-| Frontier | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-sol`, `gpt-5.6-terra` | High, including fallback |
+| Mechanical | `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol` | Low; Medium for bounded local reasoning |
+| Scoped | `gpt-6.1-terra`, `gpt-6.1-sol` | Medium for eligible scoped tasks |
+| Workhorse | `gpt-6.1-sol`, `gpt-6-sol` | Medium; High at score 13+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
+| Frontier | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol` | High, including fallback |
 
-Do not automatically select `gpt-5.5`. Honor an explicit user choice only if available. Compatibility fallbacks preserve the required reasoning effort; no compatible model or supported effort means a blocked route.
+Do not automatically select 5.x models; honor an explicit available user choice. Honor an explicit user choice only if available. Compatibility fallbacks preserve the required reasoning effort; no compatible model or supported effort means a blocked route.
 
 Model capability and reasoning effort are separate choices. Astra eligibility never automatically raises effort to XHigh. XHigh, Max, or Ultra requires a separate written rationale for the added reasoning or an explicit user choice. The helper's `--explicit-model` and `--explicit-reasoning` represent user choices; do not use them to bypass automatic gates without that authorization.
 
@@ -47,6 +48,8 @@ Score each dimension from 0 to 4 using concrete evidence; intermediate values re
 | 6–12 | Workhorse / Medium |
 | 13–15 | Workhorse / High |
 | 16–24 | Astra / High when the direct selection gate below is met; otherwise Workhorse / High |
+
+For a well-defined scoped code fix or visual/computer-use workflow with clear inputs, acceptance criteria, and verification, use Scoped / Medium when score is at most 12, reasoning and risk are below 3, and no difficult, settled-plan, or escalation override applies. Set `--scoped-task` only for such work; it does not override higher-risk or difficult routing.
 
 ### Direct Astra Selection
 
@@ -91,7 +94,7 @@ Keep this record internal unless the user asks for it:
 
 ```text
 phase=<triage|analysis|design|implementation|verification>
-score=<0-24>; capability=<Mechanical|Workhorse|Frontier>; model=<host identifier>; reasoning=<host enum>
+score=<0-24>; capability=<Mechanical|Scoped|Workhorse|Frontier>; model=<host identifier>; reasoning=<host enum>
 astra_evidence=<qualifying dimensions and concrete observations, or exceptional rationale>
 context=<target|direct-dependencies|module|repository>; mode=<subtask|unavailable|blocked|skipped>
 next=<single evidence-based next action>

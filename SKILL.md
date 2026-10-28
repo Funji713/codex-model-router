@@ -48,12 +48,13 @@ Inspect the current host's choices at route time. Prefer the newest available fa
 | Model identifier | Position | Default reasoning | Use it for |
 | --- | --- | --- | --- |
 | `gpt-6-luna` | Fast, low-cost execution | Low | Deterministic one-file edits, formatting, straightforward test changes, narrow verification, and bounded mechanical migrations. Use Medium only when the task remains well-bounded but needs a little local reasoning. |
+| `gpt-6.1-terra` | Scoped code and visual workflows | Medium | Well-defined scoped code fixes or visual/computer-use tasks with clear inputs and verification, subject to the Scoped gate in the policy. |
 | `gpt-6.1-sol` | Default workhorse | Medium | Normal implementation, API and integration work, multi-file changes with known contracts, ordinary debugging, refactors, and code review fixes. Use High for genuinely non-obvious root causes or consequential design choices. |
 | `gpt-6-astra` | Complex reasoning specialist | High | Directly select for score 16+ with reasoning 3+ and ambiguity or dependencies 3+, or for a smaller task with documented exceptional complexity and reasoning 3+. Prior Sol failures are not required. XHigh or higher requires a separate written justification or an explicit user choice. |
 | `gpt-6-sol` | Previous-generation workhorse | Medium | Compatibility fallback only when `gpt-6.1-sol` is unavailable or a user explicitly requests it. Match the `gpt-6.1-sol` route but do not prefer it automatically. |
-| `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` | Legacy models | Match the closest current tier | Compatibility fallback only for a host that lacks the current-generation choices, or on explicit user request. Prefer `gpt-5.6-sol` for normal work, `gpt-5.6-luna` for mechanical work, and never select `gpt-5.5` automatically. |
+| 5.x models | Retired from automatic routing | User choice | Use only when explicitly requested and available on the host. |
 
-The policy tiers are **Luna** (`gpt-6-luna`), **Workhorse** (`gpt-6.1-sol`), and **Frontier** (`gpt-6-astra`). Do not treat model labels as a rigid mapping: apply large-but-mechanical and small-but-difficult overrides before escalating.
+The policy tiers are **Mechanical** (`gpt-6-luna`), **Scoped** (`gpt-6.1-terra`), **Workhorse** (`gpt-6.1-sol`), and **Frontier** (`gpt-6-astra`). Do not treat model labels as a rigid mapping: apply large-but-mechanical and small-but-difficult overrides before escalating.
 
 ## Failure And Phase Control
 

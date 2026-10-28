@@ -26,7 +26,7 @@ The skill automatically routes requests that need technical execution. You can a
 $codex-model-router Investigate the failing checkout integration, implement the smallest verified fix, and run the focused tests.
 ```
 
-The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need. Mechanical work uses `gpt-6-luna`; ordinary engineering uses `gpt-6.1-sol`. Complex work can directly select `gpt-6-astra` High at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. Prior Sol failures are not required; Astra never automatically implies XHigh. `gpt-6-sol` and 5.x models provide compatibility fallbacks. These thresholds are policy heuristics rather than benchmarked model-quality guarantees.
+The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need. Mechanical work uses `gpt-6-luna`; eligible scoped code fixes and visual workflows use `gpt-6.1-terra`; ordinary engineering uses `gpt-6.1-sol`. Complex work can directly select `gpt-6-astra` High at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. Prior Sol failures are not required; Astra never automatically implies XHigh. `gpt-6-sol` remains a compatibility fallback; 5.x models require explicit user selection. These thresholds are policy heuristics rather than benchmarked model-quality guarantees.
 
 Explicit user settings override automatic selection when the host supports them. The execution subtask implements and validates, then returns changed paths, test results, and limitations. Once the uncertain phase is complete, implementation against a settled plan returns to Workhorse Medium and bounded mechanical work can use Luna.
 
@@ -41,7 +41,7 @@ python scripts/route_task.py --self-test
 python scripts/route_task.py --scope 3 --reasoning 3 --ambiguity 2 --dependencies 3 --risk 2 --context 3 --available-models gpt-6.1-sol,gpt-6-astra --supported-reasoning '{"gpt-6.1-sol":["Medium","High"],"gpt-6-astra":["High","XHigh"]}'
 ```
 
-The second example returns Astra High at score 16. For a smaller exceptional task, add `--frontier-justified --frontier-evidence "concrete rationale"`. User overrides use `--explicit-model` / `--explicit-reasoning`; `--informational` skips routing. Unsupported user settings or missing compatible models return a blocked route.
+The second example returns Astra High at score 16. For a smaller exceptional task, add `--frontier-justified --frontier-evidence "concrete rationale"`. Use `--scoped-task` for an eligible well-defined scoped fix or visual workflow. User overrides use `--explicit-model` / `--explicit-reasoning`; `--informational` skips routing. Unsupported user settings or missing compatible models return a blocked route.
 
 ## Benchmark snapshot
 
