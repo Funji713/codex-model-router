@@ -20,12 +20,12 @@ Unless the user explicitly chooses a model, select the first available model in 
 
 | Tier | Model preference order | Automatic reasoning |
 | --- | --- | --- |
-| Mechanical | `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol` | Low; Medium for bounded local reasoning |
-| Scoped | `gpt-6.1-terra`, `gpt-6.1-sol` | Medium for eligible scoped tasks |
-| Workhorse | `gpt-6.1-sol`, `gpt-6-sol` | Medium; High at score 13+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
-| Frontier | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-sol` | High, including fallback |
+| Mechanical | `gpt-6.1-terra`, `gpt-6.2-sol` | Low, or Medium for bounded local reasoning |
+| Scoped | `gpt-6.1-terra`, `gpt-6.2-sol` | Medium for eligible scoped tasks |
+| Workhorse | `gpt-6.2-sol` | Medium, or High at score 13+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
+| Frontier | `gpt-6.2-astra`, `gpt-6.2-sol` | High, including fallback |
 
-Do not automatically select 5.x models; honor an explicit available user choice. Honor an explicit user choice only if available. Compatibility fallbacks preserve the required reasoning effort; no compatible model or supported effort means a blocked route.
+Models outside the table require an explicit user choice and host support. Fallbacks preserve the required reasoning effort. The route blocks when the tier has no available model or the selected model lacks the required effort.
 
 Model capability and reasoning effort are separate choices. Astra eligibility never automatically raises effort to XHigh. XHigh, Max, or Ultra requires a separate written rationale for the added reasoning or an explicit user choice. The helper's `--explicit-model` and `--explicit-reasoning` represent user choices; do not use them to bypass automatic gates without that authorization.
 

@@ -26,9 +26,9 @@ The skill automatically routes requests that need technical execution. You can a
 $codex-model-router Investigate the failing checkout integration, implement the smallest verified fix, and run the focused tests.
 ```
 
-The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need. Mechanical work uses `gpt-6-luna`; eligible scoped code fixes and visual workflows use `gpt-6.1-terra`; ordinary engineering uses `gpt-6.1-sol`. Complex work can directly select `gpt-6-astra` High at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. Prior Sol failures are not required; Astra never automatically implies XHigh. `gpt-6-sol` remains a compatibility fallback; 5.x models require explicit user selection. These thresholds are policy heuristics rather than benchmarked model-quality guarantees.
+The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need. Mechanical work and eligible scoped work start with `gpt-6.1-terra` at Low and Medium respectively. Ordinary engineering uses `gpt-6.2-sol` at Medium or High. Complex work can directly select `gpt-6.2-astra` High at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. `gpt-6.2-sol` is the fallback for the other tiers and preserves the tier's reasoning effort. These thresholds are policy heuristics.
 
-Explicit user settings override automatic selection when the host supports them. The execution subtask implements and validates, then returns changed paths, test results, and limitations. Once the uncertain phase is complete, implementation against a settled plan returns to Workhorse Medium and bounded mechanical work can use Luna.
+Models outside those three require an explicit user choice and host support. Explicit reasoning settings also take precedence when supported. The execution subtask implements and validates, then returns changed paths, test results, and limitations. Once the uncertain phase is complete, implementation against a settled plan returns to Workhorse Medium.
 
 If the current host cannot create a selected subtask, the skill stops rather than silently executing with an unselected model.
 
@@ -38,14 +38,14 @@ The deterministic helper checks the policy without spawning workers. Supply obse
 
 ```powershell
 python scripts/route_task.py --self-test
-python scripts/route_task.py --scope 3 --reasoning 3 --ambiguity 2 --dependencies 3 --risk 2 --context 3 --available-models gpt-6.1-sol,gpt-6-astra --supported-reasoning '{"gpt-6.1-sol":["Medium","High"],"gpt-6-astra":["High","XHigh"]}'
+python scripts/route_task.py --scope 3 --reasoning 3 --ambiguity 2 --dependencies 3 --risk 2 --context 3 --available-models 'gpt-6.1-terra,gpt-6.2-sol,gpt-6.2-astra' --supported-reasoning '{"gpt-6.1-terra":["Low","Medium"],"gpt-6.2-sol":["Low","Medium","High"],"gpt-6.2-astra":["High","XHigh"]}'
 ```
 
 The second example returns Astra High at score 16. For a smaller exceptional task, add `--frontier-justified --frontier-evidence "concrete rationale"`. Use `--scoped-task` for an eligible well-defined scoped fix or visual workflow. User overrides use `--explicit-model` / `--explicit-reasoning`; `--informational` skips routing. Unsupported user settings or missing compatible models return a blocked route.
 
-## Benchmark snapshot
+## Historical benchmark
 
-The following small, descriptive benchmark compares the router with a fixed `Terra+XHigh` baseline. It is included to make the observed effect of routing inspectable, not to claim universal quality or cost gains.
+This small, descriptive benchmark compared an earlier routing policy with a fixed `Terra+XHigh` baseline. The models and measurements below reflect that historical run.
 
 ### Visual summary
 

@@ -43,31 +43,28 @@ Read [routing-policy.md](references/routing-policy.md) before a non-trivial clas
 
 ## Model Catalog And Defaults
 
-Inspect the current host's choices at route time. Prefer the newest available family; never select a legacy identifier when its current-generation counterpart is available and suitable.
+Check model and reasoning availability on the current host. Use the automatic selection order in the routing policy. Models outside that catalog require an explicit user choice and host support.
 
-| Model identifier | Position | Default reasoning | Use it for |
+| Model identifier | Tier | Default reasoning | Use it for |
 | --- | --- | --- | --- |
-| `gpt-6-luna` | Fast, low-cost execution | Low | Deterministic one-file edits, formatting, straightforward test changes, narrow verification, and bounded mechanical migrations. Use Medium only when the task remains well-bounded but needs a little local reasoning. |
-| `gpt-6.1-terra` | Scoped code and visual workflows | Medium | Well-defined scoped code fixes or visual/computer-use tasks with clear inputs and verification, subject to the Scoped gate in the policy. |
-| `gpt-6.1-sol` | Default workhorse | Medium | Normal implementation, API and integration work, multi-file changes with known contracts, ordinary debugging, refactors, and code review fixes. Use High for genuinely non-obvious root causes or consequential design choices. |
-| `gpt-6-astra` | Complex reasoning specialist | High | Directly select for score 16+ with reasoning 3+ and ambiguity or dependencies 3+, or for a smaller task with documented exceptional complexity and reasoning 3+. Prior Sol failures are not required. XHigh or higher requires a separate written justification or an explicit user choice. |
-| `gpt-6-sol` | Previous-generation workhorse | Medium | Compatibility fallback only when `gpt-6.1-sol` is unavailable or a user explicitly requests it. Match the `gpt-6.1-sol` route but do not prefer it automatically. |
-| 5.x models | Retired from automatic routing | User choice | Use only when explicitly requested and available on the host. |
+| `gpt-6.1-terra` | Mechanical and Scoped | Low for mechanical work, Medium for scoped work | Deterministic edits, bounded verification, well-defined scoped code fixes, and visual or computer-use workflows. The routing policy defines when bounded mechanical work uses Medium. |
+| `gpt-6.2-sol` | Workhorse | Medium | Implementation, integration, ordinary debugging, and refactoring. Use High when the policy calls for deeper reasoning. Sol also provides the fallback for Mechanical, Scoped, and Frontier. |
+| `gpt-6.2-astra` | Frontier | High | Complex tasks that meet the scoring or exceptional-complexity gate. XHigh or higher requires a separate written rationale or an explicit user choice. |
 
-The policy tiers are **Mechanical** (`gpt-6-luna`), **Scoped** (`gpt-6.1-terra`), **Workhorse** (`gpt-6.1-sol`), and **Frontier** (`gpt-6-astra`). Do not treat model labels as a rigid mapping: apply large-but-mechanical and small-but-difficult overrides before escalating.
+Apply the large-but-mechanical and small-but-difficult overrides before escalating.
 
 ## Failure And Phase Control
 
 - Treat command errors, missing packages, permissions, bad test setup, and syntax mistakes as execution failures. Fix the execution issue; do not raise model tier or reasoning effort.
 - Before escalating a reasoning failure, first check whether evidence or context is missing. Do not replace missing callers, error traces, schemas, contracts, or tests with deeper reasoning.
 - After two meaningful, evidence-backed attempts at the same reasoning level fail, route one follow-up subtask at an appropriate higher setting. Raise Workhorse Medium to High when it remains suitable; select Astra directly whenever the complexity gate or a documented capability gap justifies it. Prior Sol attempts are an escalation signal, not a prerequisite for Astra. Do not retry unchanged hypotheses indefinitely.
-- De-escalate once the uncertain phase is complete. Architecture analysis can require `gpt-6.1-sol` High or `gpt-6-astra`, while implementation against an approved plan generally uses `gpt-6.1-sol` Medium; deterministic cleanup can use `gpt-6-luna` Low.
+- De-escalate once the uncertain phase is complete. Architecture analysis can require `gpt-6.2-sol` High or `gpt-6.2-astra`, while implementation against an approved plan generally uses `gpt-6.2-sol` Medium; deterministic cleanup can use `gpt-6.1-terra` Low.
 
 ## Task-Specific Routing
 
 - Route focused bug fixes through `surgical-coding-debug`. Reproduce, inspect the smallest relevant context, test the hypothesis, patch the proven cause, and validate narrowly.
-- Route architecture work through `project-architecture-workflow`. Use `gpt-6.1-sol` High for bounded architecture or migration decisions; directly select `gpt-6-astra` High when interacting contracts, unresolved tradeoffs, or novel reasoning meet the policy gate. A small service addition is usually `gpt-6.1-sol` Medium.
-- Treat normal Python, Django, Django REST Framework, FastAPI, REST API, JavaScript, HTML/CSS, Docker, database, standard inference API, and known-contract integration work as `gpt-6.1-sol` Medium by default, not Astra.
+- Route architecture work through `project-architecture-workflow`. Use `gpt-6.2-sol` High for bounded architecture or migration decisions; directly select `gpt-6.2-astra` High when interacting contracts, unresolved tradeoffs, or novel reasoning meet the policy gate. A small service addition is usually `gpt-6.2-sol` Medium.
+- Treat normal Python, Django, Django REST Framework, FastAPI, REST API, JavaScript, HTML/CSS, Docker, database, standard inference API, and known-contract integration work as `gpt-6.2-sol` Medium by default, not Astra.
 - Treat AI/ML pipeline architecture, multi-model orchestration, model serving design, and unexplained inference behavior according to observed complexity. Use Workhorse High for bounded analysis and Astra High directly when the policy gate is met.
 
 ## User-Facing Messages
@@ -75,7 +72,7 @@ The policy tiers are **Mechanical** (`gpt-6-luna`), **Scoped** (`gpt-6.1-terra`)
 Keep classification details internal. Report actual routing concisely:
 
 ```text
-Subtask `agent_...` completed using `gpt-6.1-sol` + High reasoning. It changed `...`, passed `...`, and returned the following limitation: `...`.
+Subtask `agent_...` completed using `gpt-6.2-sol` + High reasoning. It changed `...`, passed `...`, and returned the following limitation: `...`.
 ```
 
 ```text

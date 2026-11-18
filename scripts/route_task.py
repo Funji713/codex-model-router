@@ -11,11 +11,12 @@ DIMENSIONS = ("scope", "reasoning", "ambiguity", "dependencies", "risk", "contex
 PHASES = ("triage", "analysis", "design", "implementation", "verification")
 EFFORTS = ("Low", "Medium", "High", "XHigh", "Max", "Ultra")
 MODEL_PREFERENCES = {
-    "Mechanical": ("gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"),
-    "Scoped": ("gpt-6.1-terra", "gpt-6.1-sol"),
-    "Workhorse": ("gpt-6.1-sol", "gpt-6-sol"),
-    "Frontier": ("gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol"),
+    "Mechanical": ("gpt-6.1-terra", "gpt-6.2-sol"),
+    "Scoped": ("gpt-6.1-terra", "gpt-6.2-sol"),
+    "Workhorse": ("gpt-6.2-sol",),
+    "Frontier": ("gpt-6.2-astra", "gpt-6.2-sol"),
 }
+DEFAULT_MODELS = tuple(dict.fromkeys(model for models in MODEL_PREFERENCES.values() for model in models))
 
 
 @dataclass(frozen=True)
@@ -37,10 +38,7 @@ class RouteInput:
     reasoning_failures: int = 0
     routing_capability: str = "subtask"
     technical_execution: bool = True
-    available_models: tuple[str, ...] = (
-        "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
-        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
-    )
+    available_models: tuple[str, ...] = DEFAULT_MODELS
     frontier_justified: bool = False
     frontier_evidence: str = ""
     explicit_model: str | None = None
@@ -104,7 +102,8 @@ def select_model(capability: str, task: RouteInput) -> str | None:
 def select_reasoning(task: RouteInput, capability: str, escalating: bool) -> str:
     if task.explicit_reasoning is not None:
         return task.explicit_reasoning
-    if capability == "Frontier" or task.explicit_model == "gpt-6-astra":
+    # Retired Astra keeps its default only when explicitly requested.
+    if capability == "Frontier" or task.explicit_model in ("gpt-6.2-astra", "gpt-6-astra"):
         return "High"
     if capability == "Scoped":
         return "Medium"
@@ -148,7 +147,7 @@ def route_task(task: RouteInput) -> dict[str, object]:
         notes.append("explicitly bounded verification uses the low tier")
     if task.scoped_task and capability == "Workhorse" and task.score <= 12 and task.reasoning < 3 and task.risk < 3 and not task.small_difficult and not task.settled_plan and task.reasoning_failures < 2:
         capability = "Scoped"
-        notes.append("well-defined scoped code fix or visual workflow uses Terra with verification")
+        notes.append("well-defined scoped code fix or visual workflow uses the Scoped tier with verification")
     escalating = task.reasoning_failures >= 2 and not (task.execution_failure or task.missing_context)
     if escalating:
         if capability == "Mechanical":
@@ -190,11 +189,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reasoning-failures", type=int, default=0)
     parser.add_argument("--routing-capability", choices=("subtask", "unavailable"), default="subtask")
     parser.add_argument("--informational", dest="technical_execution", action="store_false")
-    parser.add_argument("--available-models", default=",".join(RouteInput.available_models), help="comma-separated host model identifiers")
+    parser.add_argument(
+        "--available-models",
+        default=",".join(DEFAULT_MODELS),
+        help="comma-separated host model identifiers (default policy catalog: %(default)s)",
+    )
     parser.add_argument("--frontier-evidence", default="", help="exceptional complexity or capability-gap rationale for --frontier-justified")
     parser.add_argument("--explicit-model", help="user-selected model; must be available on this host")
     parser.add_argument("--explicit-reasoning", choices=EFFORTS, help="user-selected effort; overrides automatic defaults")
-    parser.add_argument("--supported-reasoning", type=json.loads, help='host reasoning map, e.g. {"gpt-6-astra":["High","XHigh"]}')
+    parser.add_argument("--supported-reasoning", type=json.loads, help='host reasoning map, e.g. {"gpt-6.2-astra":["High","XHigh"]}')
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args()
 
@@ -203,44 +206,40 @@ def run_self_test() -> None:
     ordinary = RouteInput(1, 2, 1, 1, 2, 1)
     boundary = RouteInput(3, 3, 2, 3, 2, 3)  # 16, reasoning and dependencies gate
     cases = (
-        ("score 5", RouteInput(1, 1, 1, 1, 1, 0), "Mechanical", "gpt-6-luna", "Low"),
-        ("score 6", RouteInput(1, 1, 1, 1, 1, 1), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("ordinary", ordinary, "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("score 12", RouteInput(2, 2, 2, 2, 2, 2), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("score 13", RouteInput(3, 2, 2, 2, 2, 2), "Workhorse", "gpt-6.1-sol", "High"),
-        ("score 15", replace(boundary, scope=2), "Workhorse", "gpt-6.1-sol", "High"),
-        ("score 16 direct", boundary, "Frontier", "gpt-6-astra", "High"),
-        ("ambiguity gate", RouteInput(3, 3, 3, 2, 2, 3), "Frontier", "gpt-6-astra", "High"),
-        ("high score low reasoning", RouteInput(4, 2, 4, 4, 4, 4), "Workhorse", "gpt-6.1-sol", "High"),
-        ("high score bounded contracts", RouteInput(4, 4, 2, 2, 4, 4), "Workhorse", "gpt-6.1-sol", "High"),
-        ("max score", RouteInput(4, 4, 4, 4, 4, 4), "Frontier", "gpt-6-astra", "High"),
-        ("small exceptional", RouteInput(0, 4, 2, 2, 2, 2, small_difficult=True, frontier_justified=True, frontier_evidence="novel lock-free algorithm requires proving two interacting invariants"), "Frontier", "gpt-6-astra", "High"),
-        ("small difficult preserves Astra", replace(boundary, small_difficult=True), "Frontier", "gpt-6-astra", "High"),
-        ("ordinary difficult", replace(ordinary, small_difficult=True), "Workhorse", "gpt-6.1-sol", "High"),
-        ("mechanical override", replace(boundary, large_mechanical=True), "Mechanical", "gpt-6-luna", "Low"),
-        ("settled plan", replace(boundary, phase="implementation", settled_plan=True), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("hard implementation", replace(boundary, phase="implementation"), "Frontier", "gpt-6-astra", "High"),
-        ("bounded verification", replace(ordinary, phase="verification", bounded_verification=True), "Mechanical", "gpt-6-luna", "Medium"),
-        ("workhorse failures", replace(ordinary, reasoning_failures=2), "Workhorse", "gpt-6.1-sol", "High"),
-        ("mechanical failures", RouteInput(0, 0, 0, 0, 0, 0, reasoning_failures=2), "Workhorse", "gpt-6.1-sol", "High"),
-        ("environment failure", replace(ordinary, reasoning_failures=2, execution_failure=True), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("missing context", replace(ordinary, reasoning_failures=2, missing_context=True), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("explicit Astra", replace(ordinary, explicit_model="gpt-6-astra"), "Workhorse", "gpt-6-astra", "High"),
-        ("explicit Astra on mechanical", RouteInput(0, 0, 0, 0, 0, 0, explicit_model="gpt-6-astra"), "Mechanical", "gpt-6-astra", "High"),
-        ("small high reasoning", RouteInput(0, 4, 0, 0, 0, 0), "Workhorse", "gpt-6.1-sol", "High"),
-        ("mechanical settled plan", replace(boundary, large_mechanical=True, phase="implementation", settled_plan=True), "Mechanical", "gpt-6-luna", "Low"),
-        ("evidence without hard reasoning", replace(ordinary, frontier_justified=True, frontier_evidence="multiple services but a known contract"), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("explicit Luna", replace(boundary, explicit_model="gpt-6-luna", explicit_reasoning="Low"), "Frontier", "gpt-6-luna", "Low"),
-        ("explicit effort", replace(boundary, explicit_reasoning="XHigh"), "Frontier", "gpt-6-astra", "XHigh"),
-        ("Astra fallback", replace(boundary, available_models=("gpt-6.1-sol",)), "Frontier", "gpt-6.1-sol", "High"),
-        ("previous workhorse fallback", replace(boundary, available_models=("gpt-6-sol",)), "Frontier", "gpt-6-sol", "High"),
+        ("score 5", RouteInput(1, 1, 1, 1, 1, 0), "Mechanical", "gpt-6.1-terra", "Low"),
+        ("score 6", RouteInput(1, 1, 1, 1, 1, 1), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("ordinary", ordinary, "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("score 12", RouteInput(2, 2, 2, 2, 2, 2), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("score 13", RouteInput(3, 2, 2, 2, 2, 2), "Workhorse", "gpt-6.2-sol", "High"),
+        ("score 15", replace(boundary, scope=2), "Workhorse", "gpt-6.2-sol", "High"),
+        ("score 16 direct", boundary, "Frontier", "gpt-6.2-astra", "High"),
+        ("ambiguity gate", RouteInput(3, 3, 3, 2, 2, 3), "Frontier", "gpt-6.2-astra", "High"),
+        ("high score low reasoning", RouteInput(4, 2, 4, 4, 4, 4), "Workhorse", "gpt-6.2-sol", "High"),
+        ("high score bounded contracts", RouteInput(4, 4, 2, 2, 4, 4), "Workhorse", "gpt-6.2-sol", "High"),
+        ("max score", RouteInput(4, 4, 4, 4, 4, 4), "Frontier", "gpt-6.2-astra", "High"),
+        ("small exceptional", RouteInput(0, 4, 2, 2, 2, 2, small_difficult=True, frontier_justified=True, frontier_evidence="novel lock-free algorithm requires proving two interacting invariants"), "Frontier", "gpt-6.2-astra", "High"),
+        ("small difficult preserves Astra", replace(boundary, small_difficult=True), "Frontier", "gpt-6.2-astra", "High"),
+        ("ordinary difficult", replace(ordinary, small_difficult=True), "Workhorse", "gpt-6.2-sol", "High"),
+        ("mechanical override", replace(boundary, large_mechanical=True), "Mechanical", "gpt-6.1-terra", "Low"),
+        ("settled plan", replace(boundary, phase="implementation", settled_plan=True), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("hard implementation", replace(boundary, phase="implementation"), "Frontier", "gpt-6.2-astra", "High"),
+        ("bounded verification", replace(ordinary, phase="verification", bounded_verification=True), "Mechanical", "gpt-6.1-terra", "Medium"),
+        ("workhorse failures", replace(ordinary, reasoning_failures=2), "Workhorse", "gpt-6.2-sol", "High"),
+        ("mechanical failures", RouteInput(0, 0, 0, 0, 0, 0, reasoning_failures=2), "Workhorse", "gpt-6.2-sol", "High"),
+        ("environment failure", replace(ordinary, reasoning_failures=2, execution_failure=True), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("missing context", replace(ordinary, reasoning_failures=2, missing_context=True), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("explicit Astra", replace(ordinary, explicit_model="gpt-6.2-astra"), "Workhorse", "gpt-6.2-astra", "High"),
+        ("explicit Astra on mechanical", RouteInput(0, 0, 0, 0, 0, 0, explicit_model="gpt-6.2-astra"), "Mechanical", "gpt-6.2-astra", "High"),
+        ("small high reasoning", RouteInput(0, 4, 0, 0, 0, 0), "Workhorse", "gpt-6.2-sol", "High"),
+        ("mechanical settled plan", replace(boundary, large_mechanical=True, phase="implementation", settled_plan=True), "Mechanical", "gpt-6.1-terra", "Low"),
+        ("evidence without hard reasoning", replace(ordinary, frontier_justified=True, frontier_evidence="multiple services but a known contract"), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("explicit effort", replace(boundary, explicit_reasoning="XHigh"), "Frontier", "gpt-6.2-astra", "XHigh"),
+        ("Astra fallback", replace(boundary, available_models=("gpt-6.2-sol",)), "Frontier", "gpt-6.2-sol", "High"),
         ("scoped Terra", replace(ordinary, scoped_task=True), "Scoped", "gpt-6.1-terra", "Medium"),
-        ("scoped fallback", replace(ordinary, scoped_task=True, available_models=("gpt-6.1-sol",)), "Scoped", "gpt-6.1-sol", "Medium"),
-        ("scoped high risk", replace(ordinary, scoped_task=True, risk=3), "Workhorse", "gpt-6.1-sol", "Medium"),
-        ("scoped escalation", replace(ordinary, scoped_task=True, reasoning_failures=2), "Workhorse", "gpt-6.1-sol", "High"),
-        ("Luna Terra fallback", RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-6.1-terra",)), "Mechanical", "gpt-6.1-terra", "Low"),
-        ("Luna workhorse fallback", RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-6.1-sol",)), "Mechanical", "gpt-6.1-sol", "Low"),
-        ("explicit legacy", replace(ordinary, explicit_model="gpt-5.5"), "Workhorse", "gpt-5.5", "Medium"),
+        ("scoped fallback", replace(ordinary, scoped_task=True, available_models=("gpt-6.2-sol",)), "Scoped", "gpt-6.2-sol", "Medium"),
+        ("scoped high risk", replace(ordinary, scoped_task=True, risk=3), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("scoped escalation", replace(ordinary, scoped_task=True, reasoning_failures=2), "Workhorse", "gpt-6.2-sol", "High"),
+        ("mechanical fallback", RouteInput(0, 0, 0, 0, 0, 0, available_models=("gpt-6.2-sol",)), "Mechanical", "gpt-6.2-sol", "Low"),
     )
     count = 0
     for label, task, capability, model, effort in cases:
@@ -248,22 +247,49 @@ def run_self_test() -> None:
         assert (result["recommended_capability"], result["recommended_model"], result["recommended_reasoning"]) == (capability, model, effort), (label, result)
         assert result["mode"] == "subtask", (label, result)
         count += 1
+    retired_models = (
+        "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna",
+        "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5",
+    )
+    for task in (RouteInput(0, 0, 0, 0, 0, 0), replace(ordinary, scoped_task=True), ordinary, boundary):
+        result = route_task(replace(task, available_models=retired_models))
+        assert result["mode"] == "blocked" and result["recommended_model"] is None, result
+        result = route_task(replace(task, available_models=retired_models + DEFAULT_MODELS))
+        assert result == route_task(task), result
+        count += 2
+    for model in retired_models:
+        override = replace(ordinary, explicit_model=model)
+        result = route_task(override)
+        assert result["mode"] == "blocked" and result["recommended_model"] is None, result
+        effort = "High" if model == "gpt-6-astra" else "Medium"
+        result = route_task(replace(
+            override, available_models=retired_models, supported_reasoning={model: (effort,)},
+        ))
+        assert result["mode"] == "subtask" and result["host_reasoning_verified"], result
+        assert (result["recommended_model"], result["recommended_reasoning"]) == (model, effort), result
+        count += 2
+    retired_override = route_task(replace(
+        ordinary, available_models=retired_models, explicit_model="gpt-6-luna",
+        explicit_reasoning="Low", supported_reasoning={"gpt-6-luna": ("Low",)},
+    ))
+    assert retired_override["mode"] == "subtask" and retired_override["recommended_reasoning"] == "Low", retired_override
+    count += 1
     for task in (replace(ordinary, routing_capability="unavailable"), replace(ordinary, routing_capability="unavailable", execution_failure=True), replace(ordinary, routing_capability="unavailable", missing_context=True)):
         result = route_task(task)
         assert result["mode"] == "unavailable" and result["action"] == "stop: automatic routing is unavailable", result
         count += 1
-    for task in (replace(ordinary, available_models=()), replace(ordinary, available_models=("gpt-5.5",)), replace(ordinary, available_models=("gpt-5.6-terra",)), replace(ordinary, explicit_model="absent"), replace(boundary, supported_reasoning={"gpt-6-astra": ("Low",)}), replace(boundary, supported_reasoning={}), replace(boundary, explicit_reasoning="Ultra", supported_reasoning={"gpt-6-astra": ("High",)})):
+    for task in (replace(ordinary, available_models=()), replace(ordinary, explicit_model="absent"), replace(boundary, supported_reasoning={"gpt-6.2-astra": ("Low",)}), replace(boundary, supported_reasoning={}), replace(boundary, explicit_reasoning="Ultra", supported_reasoning={"gpt-6.2-astra": ("High",)})):
         result = route_task(task)
         assert result["mode"] == "blocked" and result["action"].startswith("stop:"), result
         count += 1
-    for task in (replace(boundary, technical_execution=False), replace(ordinary, technical_execution=False, explicit_model="gpt-6-astra")):
+    for task in (replace(boundary, technical_execution=False), replace(ordinary, technical_execution=False, explicit_model="gpt-6.2-astra")):
         result = route_task(task)
         assert result["mode"] == "skipped" and result["recommended_model"] is None, result
         count += 1
-    verified = route_task(replace(boundary, supported_reasoning={"gpt-6-astra": ("High", "XHigh")}))
+    verified = route_task(replace(boundary, supported_reasoning={"gpt-6.2-astra": ("High", "XHigh")}))
     assert verified["mode"] == "subtask" and verified["host_reasoning_verified"] is True, verified
     count += 1
-    for task in (replace(ordinary, scope=5), replace(ordinary, reasoning_failures=-1), replace(ordinary, frontier_justified=True), replace(ordinary, large_mechanical=True, small_difficult=True), replace(ordinary, settled_plan=True), replace(ordinary, bounded_verification=True), replace(ordinary, supported_reasoning={"gpt-6.1-sol": ("invalid",)})):
+    for task in (replace(ordinary, scope=5), replace(ordinary, reasoning_failures=-1), replace(ordinary, frontier_justified=True), replace(ordinary, large_mechanical=True, small_difficult=True), replace(ordinary, settled_plan=True), replace(ordinary, bounded_verification=True), replace(ordinary, supported_reasoning={"gpt-6.2-sol": ("invalid",)})):
         try:
             route_task(task)
         except ValueError:
