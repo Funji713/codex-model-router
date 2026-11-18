@@ -27,7 +27,7 @@ The parent must prepend `ROUTED_EXECUTION_SUBTASK: true` to every spawned worker
 - The parent task waits only when it needs the completed result, reviews the returned result or change artifact, then reports the outcome to the user. Do not duplicate the implementation in the parent task. Release the completed subtask if the host supports that operation.
 - Never claim a subtask ran or routing occurred unless the spawn operation and completion result succeeded. Report the subtask identifier and selected settings after success.
 - If the host cannot spawn a selected subtask, stop before implementation and report that automatic routing is unavailable. Do not fall back to advisory execution unless the user explicitly permits it.
-- Respect an explicit user model or reasoning choice. It overrides automatic selection for that route.
+- Respect an explicit user model or reasoning choice. It overrides automatic selection for that route. Verify the selected model and effort against the host before spawning, and report an unavailable choice.
 
 Read [routing-policy.md](references/routing-policy.md) before a non-trivial classification. Use [route_task.py](scripts/route_task.py) when a deterministic score or a testable execution route is useful; it validates policy only and does not itself call host tools.
 
@@ -35,7 +35,7 @@ Read [routing-policy.md](references/routing-policy.md) before a non-trivial clas
 
 1. Separate the request into independently verifiable phases when that reduces capability or reasoning requirements. Do not split a tightly coupled problem merely to use cheaper models.
 2. For each phase, classify scope, reasoning, ambiguity, dependencies, risk, and context need. Do not infer complexity from prompt length or changed-file count alone.
-3. Apply the score, override rules, and phase rules from `routing-policy.md`.
+3. Apply the score and phase overrides from `routing-policy.md`, then select reasoning for the resulting capability. Frontier effort is High by default and rises to XHigh, Max, or Ultra when the automatic effort gates are met.
 4. Start with Minimum Required Context: target files, then direct callers or imports, then the related module, then repository-wide search only when earlier stages cannot resolve a material unknown.
 5. Select the lowest suitable current-host model and reasoning identifiers, then spawn one subtask. Prefer one subtask that owns the work over parallel duplication.
 6. Wait only for the needed completion result. Review the subtask report or returned change artifact, then report the result from the parent task.
@@ -49,7 +49,7 @@ Check model and reasoning availability on the current host. Use the automatic se
 | --- | --- | --- | --- |
 | `gpt-6.1-terra` | Mechanical and Scoped | Low for mechanical work, Medium for scoped work | Deterministic edits, bounded verification, well-defined scoped code fixes, and visual or computer-use workflows. The routing policy defines when bounded mechanical work uses Medium. |
 | `gpt-6.2-sol` | Workhorse | Medium | Implementation, integration, ordinary debugging, and refactoring. Use High when the policy calls for deeper reasoning. Sol also provides the fallback for Mechanical, Scoped, and Frontier. |
-| `gpt-6.2-astra` | Frontier | High | Complex tasks that meet the scoring or exceptional-complexity gate. XHigh or higher requires a separate written rationale or an explicit user choice. |
+| `gpt-6.2-astra` | Frontier | High, with automatic XHigh, Max, or Ultra when justified | Complex tasks that meet the scoring or exceptional-complexity gate. The Frontier effort gates apply to Astra and its Sol fallback. |
 
 Apply the large-but-mechanical and small-but-difficult overrides before escalating.
 
@@ -63,9 +63,9 @@ Apply the large-but-mechanical and small-but-difficult overrides before escalati
 ## Task-Specific Routing
 
 - Route focused bug fixes through `surgical-coding-debug`. Reproduce, inspect the smallest relevant context, test the hypothesis, patch the proven cause, and validate narrowly.
-- Route architecture work through `project-architecture-workflow`. Use `gpt-6.2-sol` High for bounded architecture or migration decisions; directly select `gpt-6.2-astra` High when interacting contracts, unresolved tradeoffs, or novel reasoning meet the policy gate. A small service addition is usually `gpt-6.2-sol` Medium.
+- Route architecture work through `project-architecture-workflow`. Use `gpt-6.2-sol` High for bounded architecture or migration decisions. Select Frontier directly when interacting contracts, unresolved tradeoffs, or novel reasoning meet the policy gate. A small service addition is usually `gpt-6.2-sol` Medium.
 - Treat normal Python, Django, Django REST Framework, FastAPI, REST API, JavaScript, HTML/CSS, Docker, database, standard inference API, and known-contract integration work as `gpt-6.2-sol` Medium by default, not Astra.
-- Treat AI/ML pipeline architecture, multi-model orchestration, model serving design, and unexplained inference behavior according to observed complexity. Use Workhorse High for bounded analysis and Astra High directly when the policy gate is met.
+- Score AI/ML pipeline architecture, multi-model orchestration, model serving design, and unexplained inference behavior using observed complexity. Use Workhorse High for bounded analysis and the applicable Frontier effort when the gates are met.
 
 ## User-Facing Messages
 

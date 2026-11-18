@@ -26,7 +26,18 @@ The skill automatically routes requests that need technical execution. You can a
 $codex-model-router Investigate the failing checkout integration, implement the smallest verified fix, and run the focused tests.
 ```
 
-The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need. Mechanical work and eligible scoped work start with `gpt-6.1-terra` at Low and Medium respectively. Ordinary engineering uses `gpt-6.2-sol` at Medium or High. Complex work can directly select `gpt-6.2-astra` High at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. `gpt-6.2-sol` is the fallback for the other tiers and preserves the tier's reasoning effort. These thresholds are policy heuristics.
+The parent scores scope, reasoning, ambiguity, dependencies, risk, and context need from 0 to 4 each. Mechanical work and eligible scoped work start with `gpt-6.1-terra` at Low and Medium respectively. Ordinary engineering uses `gpt-6.2-sol` at Medium or High. Frontier work starts with `gpt-6.2-astra` and qualifies at score 16+ when reasoning is 3+ and ambiguity or dependencies is 3+. A smaller task can qualify with reasoning 3+ and a documented exceptional-complexity rationale. `gpt-6.2-sol` is the fallback for the other tiers and preserves the selected effort.
+
+After phase overrides, the router automatically selects the highest qualifying Frontier effort.
+
+| Effort | Gate |
+| --- | --- |
+| Ultra | Total 22+, reasoning 4, ambiguity 3+, and dependencies 3+ |
+| Max | Total 20+, reasoning 4, and either ambiguity or dependencies 3+ |
+| XHigh | Total 18+, or reasoning 4 with a documented exceptional Frontier rationale |
+| High | Other Frontier work |
+
+These thresholds are policy heuristics. The historical benchmark predates them.
 
 Models outside those three require an explicit user choice and host support. Explicit reasoning settings also take precedence when supported. The execution subtask implements and validates, then returns changed paths, test results, and limitations. Once the uncertain phase is complete, implementation against a settled plan returns to Workhorse Medium.
 
@@ -39,9 +50,10 @@ The deterministic helper checks the policy without spawning workers. Supply obse
 ```powershell
 python scripts/route_task.py --self-test
 python scripts/route_task.py --scope 3 --reasoning 3 --ambiguity 2 --dependencies 3 --risk 2 --context 3 --available-models 'gpt-6.1-terra,gpt-6.2-sol,gpt-6.2-astra' --supported-reasoning '{"gpt-6.1-terra":["Low","Medium"],"gpt-6.2-sol":["Low","Medium","High"],"gpt-6.2-astra":["High","XHigh"]}'
+python scripts/route_task.py --scope 4 --reasoning 4 --ambiguity 3 --dependencies 3 --risk 4 --context 4 --available-models 'gpt-6.2-sol,gpt-6.2-astra' --supported-reasoning '{"gpt-6.2-astra":["High","XHigh","Max","Ultra"]}'
 ```
 
-The second example returns Astra High at score 16. For a smaller exceptional task, add `--frontier-justified --frontier-evidence "concrete rationale"`. Use `--scoped-task` for an eligible well-defined scoped fix or visual workflow. User overrides use `--explicit-model` / `--explicit-reasoning`; `--informational` skips routing. Unsupported user settings or missing compatible models return a blocked route.
+The two routing examples return Astra High at score 16 and Astra Ultra at score 22. For a smaller exceptional task, add `--frontier-justified --frontier-evidence "concrete rationale"`. Use `--scoped-task` for an eligible well-defined scoped fix or visual workflow. Use `--explicit-model` and `--explicit-reasoning` for user overrides. Use `--informational` to skip routing. With a supplied host reasoning map, the route blocks when the selected model is omitted or lacks the required effort.
 
 ## Historical benchmark
 

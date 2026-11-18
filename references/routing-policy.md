@@ -6,7 +6,7 @@ Automatically route requests requiring technical execution, including explicit `
 
 Inspect the host's spawning tool, available model identifiers, and each selected model's supported reasoning levels. If the host cannot create the selected subtask, stop and report that routing is unavailable. An unavailable explicit choice must be reported; never silently substitute another model or effort.
 
-The helper recommends settings; it does not invoke host tools or establish host availability. Supply `--available-models` and, when available, `--supported-reasoning` from the actual host. Without a reasoning map, its output is unverified and the parent must check the host before spawning. With a supplied map, unsupported or omitted selected-model reasoning blocks the route.
+The helper recommends settings. Supply `--available-models` and `--supported-reasoning` from the actual host when available. Without a reasoning map, the parent must verify the recommendation before spawning. With a supplied map, the route blocks if the selected model is omitted or its listed reasoning levels exclude the selected effort. The helper reports these conditions separately.
 
 ## Parent And Subtask Contract
 
@@ -23,11 +23,11 @@ Unless the user explicitly chooses a model, select the first available model in 
 | Mechanical | `gpt-6.1-terra`, `gpt-6.2-sol` | Low, or Medium for bounded local reasoning |
 | Scoped | `gpt-6.1-terra`, `gpt-6.2-sol` | Medium for eligible scoped tasks |
 | Workhorse | `gpt-6.2-sol` | Medium, or High at score 13+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
-| Frontier | `gpt-6.2-astra`, `gpt-6.2-sol` | High, including fallback |
+| Frontier | `gpt-6.2-astra`, `gpt-6.2-sol` | High, XHigh, Max, or Ultra according to the effort gates below |
 
 Models outside the table require an explicit user choice and host support. Fallbacks preserve the required reasoning effort. The route blocks when the tier has no available model or the selected model lacks the required effort.
 
-Model capability and reasoning effort are separate choices. Astra eligibility never automatically raises effort to XHigh. XHigh, Max, or Ultra requires a separate written rationale for the added reasoning or an explicit user choice. The helper's `--explicit-model` and `--explicit-reasoning` represent user choices; do not use them to bypass automatic gates without that authorization.
+The helper's `--explicit-model` and `--explicit-reasoning` represent user choices. A supported explicit effort takes precedence at every score and capability.
 
 ## Complexity Score
 
@@ -47,13 +47,13 @@ Score each dimension from 0 to 4 using concrete evidence; intermediate values re
 | 0–5 | Mechanical / Low; difficult reasoning still overrides this route |
 | 6–12 | Workhorse / Medium |
 | 13–15 | Workhorse / High |
-| 16–24 | Astra / High when the direct selection gate below is met; otherwise Workhorse / High |
+| 16–24 | Frontier when the direct selection gate below is met, otherwise Workhorse / High |
 
 For a well-defined scoped code fix or visual/computer-use workflow with clear inputs, acceptance criteria, and verification, use Scoped / Medium when score is at most 12, reasoning and risk are below 3, and no difficult, settled-plan, or escalation override applies. Set `--scoped-task` only for such work; it does not override higher-risk or difficult routing.
 
-### Direct Astra Selection
+### Frontier Capability
 
-Select Astra High immediately when **all** of these hold:
+Select Frontier immediately when **all** of these hold:
 
 - Total score is at least **16**.
 - Reasoning is at least **3**.
@@ -61,9 +61,20 @@ Select Astra High immediately when **all** of these hold:
 
 Record the concrete evidence supporting the qualifying dimensions. This permits direct selection for a coupled architecture, difficult multi-system failure, or novel design; a failed Sol attempt is not required.
 
-For a smaller task that misses the total or supporting-dimension threshold, select Astra High when reasoning is at least 3 and there is a written exceptional-complexity rationale. Examples include a novel concurrency proof, a difficult algorithm with interacting invariants, or a demonstrated Workhorse capability gap after relevant evidence is present. In the helper, supply both `--frontier-justified` and `--frontier-evidence "concrete rationale"`. A bare flag is rejected.
+For a smaller task that misses the total or supporting-dimension threshold, select Frontier when reasoning is at least 3 and there is a written exceptional-complexity rationale. Examples include a novel concurrency proof, a difficult algorithm with interacting invariants, or a demonstrated Workhorse capability gap after relevant evidence is present. In the helper, supply both `--frontier-justified` and `--frontier-evidence "concrete rationale"`.
 
-These thresholds are an operational heuristic, not a measured model-quality guarantee. File count, high stakes, broad context, or domain names alone do not establish Astra eligibility.
+### Frontier Reasoning Effort
+
+After phase and mechanical overrides, apply these gates in order to a Frontier route. Use the same effort if Sol is selected as the Frontier fallback.
+
+| Effort | Required evidence | Example |
+| --- | --- | --- |
+| Ultra | Total 22+, reasoning 4, ambiguity 3+, and dependencies 3+ | Design a cross-service data migration with conflicting recovery requirements and interacting cutover contracts. |
+| Max | Total 20+, reasoning 4, and either ambiguity or dependencies 3+ | Design a multi-service cutover with clear acceptance criteria and tightly coupled data, rollback, and release contracts. |
+| XHigh | Total 18+, or reasoning 4 with a documented exceptional Frontier rationale | Prove interacting invariants in a localized lock-free algorithm that qualifies through the exceptional route. |
+| High | Other Frontier work | Trace a coupled failure at score 16 when the dependency contracts are understood. |
+
+Use observed task difficulty to score the gates. File count, high stakes, broad context, and domain names are insufficient on their own. Recover tooling failures and gather missing context before reconsidering difficulty. The thresholds are policy heuristics. The historical benchmark predates these gates, and their quality and cost tradeoffs have yet to be measured.
 
 ## Overrides And Phases
 
@@ -72,11 +83,11 @@ Apply explicit user settings to the final route; automatic overrides below gover
 | Situation | Route |
 | --- | --- |
 | Large mechanical rename or generated migration with settled contracts | Mechanical / Low with targeted validation; `--large-mechanical` overrides total score. |
-| Small difficult concurrency, security, integrity, or algorithm work | Workhorse / High minimum; keep Astra if its evidence gate is met. Use `--small-difficult`; reasoning 3+ also prevents a Mechanical route. |
+| Small difficult concurrency, security, integrity, or algorithm work | Workhorse / High minimum. Keep Frontier if its evidence gate is met and apply the Frontier effort rules. Use `--small-difficult` for the routing override. Reasoning 3+ also prevents a Mechanical route. |
 | Known framework or standard API with clear contracts | Usually Workhorse / Medium; a framework name adds no automatic complexity. |
 | Implementation after the uncertain phase is resolved | Workhorse / Medium when the plan is settled; `--phase implementation --settled-plan` makes this explicit. Difficult unresolved implementation still qualifies for Astra. |
 | Focused, bounded verification | Mechanical / Low or Medium using `--phase verification --bounded-verification`; keep difficult diagnosis at its required tier. |
-| Two meaningful failed reasoning attempts | Raise Mechanical to Workhorse High or Workhorse Medium to High; Astra still requires its complexity/evidence gate. |
+| Two meaningful failed reasoning attempts | Raise Mechanical to Workhorse High or Workhorse Medium to High. Apply the Frontier capability and effort gates when difficulty evidence warrants it. |
 | Command, environment, dependency, permission failure | Recover the execution condition; do not escalate because of this failure. |
 | Missing information | Gather the smallest missing context before spawning or escalating. |
 
@@ -95,7 +106,7 @@ Keep this record internal unless the user asks for it:
 ```text
 phase=<triage|analysis|design|implementation|verification>
 score=<0-24>; capability=<Mechanical|Scoped|Workhorse|Frontier>; model=<host identifier>; reasoning=<host enum>
-astra_evidence=<qualifying dimensions and concrete observations, or exceptional rationale>
+frontier_evidence=<dimensions and concrete observations supporting capability and effort, or exceptional rationale>
 context=<target|direct-dependencies|module|repository>; mode=<subtask|unavailable|blocked|skipped>
 next=<single evidence-based next action>
 ```
