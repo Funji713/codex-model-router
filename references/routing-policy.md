@@ -22,7 +22,7 @@ Unless the user explicitly chooses a model, select the first available model in 
 | --- | --- | --- |
 | Mechanical | `gpt-6.1-terra`, `gpt-6.2-sol` | Low, or Medium for bounded local reasoning |
 | Scoped | `gpt-6.1-terra`, `gpt-6.2-sol` | Medium for eligible scoped tasks |
-| Workhorse | `gpt-6.2-sol` | Medium, or High at score 13+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
+| Workhorse | `gpt-6.2-sol` | Medium, or High at score 12+, reasoning 3+, small difficult work, or two meaningful reasoning failures |
 | Frontier | `gpt-6.2-astra`, `gpt-6.2-sol` | High, XHigh, Max, or Ultra according to the effort gates below |
 
 Models outside the table require an explicit user choice and host support. Fallbacks preserve the required reasoning effort. The route blocks when the tier has no available model or the selected model lacks the required effort.
@@ -44,18 +44,18 @@ Score each dimension from 0 to 4 using concrete evidence; intermediate values re
 
 | Total | Starting route |
 | --- | --- |
-| 0–5 | Mechanical / Low; difficult reasoning still overrides this route |
-| 6–12 | Workhorse / Medium |
-| 13–15 | Workhorse / High |
-| 16–24 | Frontier when the direct selection gate below is met, otherwise Workhorse / High |
+| 0–4 | Mechanical / Low; difficult reasoning still overrides this route |
+| 5–11 | Workhorse / Medium |
+| 12–14 | Workhorse / High |
+| 15–24 | Frontier when the direct selection gate below is met, otherwise Workhorse / High |
 
-For a well-defined scoped code fix or visual/computer-use workflow with clear inputs, acceptance criteria, and verification, use Scoped / Medium when score is at most 12, reasoning and risk are below 3, and no difficult, settled-plan, or escalation override applies. Set `--scoped-task` only for such work; it does not override higher-risk or difficult routing.
+For a well-defined scoped code fix or visual/computer-use workflow with clear inputs, acceptance criteria, and verification, use Scoped / Medium at scores 5–11 when reasoning and risk are below 3 and no mechanical, difficult, settled-plan, verification, or escalation override applies. Set `--scoped-task` only for such work; it does not override higher-risk or difficult routing.
 
 ### Frontier Capability
 
 Select Frontier immediately when **all** of these hold:
 
-- Total score is at least **16**.
+- Total score is at least **15**.
 - Reasoning is at least **3**.
 - Ambiguity **or** dependencies is at least **3**.
 
@@ -69,10 +69,10 @@ After phase and mechanical overrides, apply these gates in order to a Frontier r
 
 | Effort | Required evidence | Example |
 | --- | --- | --- |
-| Ultra | Total 22+, reasoning 4, ambiguity 3+, and dependencies 3+ | Design a cross-service data migration with conflicting recovery requirements and interacting cutover contracts. |
-| Max | Total 20+, reasoning 4, and either ambiguity or dependencies 3+ | Design a multi-service cutover with clear acceptance criteria and tightly coupled data, rollback, and release contracts. |
-| XHigh | Total 18+, or reasoning 4 with a documented exceptional Frontier rationale | Prove interacting invariants in a localized lock-free algorithm that qualifies through the exceptional route. |
-| High | Other Frontier work | Trace a coupled failure at score 16 when the dependency contracts are understood. |
+| Ultra | Total 21+, reasoning 4, ambiguity 3+, and dependencies 3+ | Design a cross-service data migration with conflicting recovery requirements and interacting cutover contracts. |
+| Max | Total 19+, reasoning 4, and either ambiguity or dependencies 3+ | Design a multi-service cutover with clear acceptance criteria and tightly coupled data, rollback, and release contracts. |
+| XHigh | Total 17+, or reasoning 4 with a documented exceptional Frontier rationale | Prove interacting invariants in a localized lock-free algorithm that qualifies through the exceptional route. |
+| High | Other Frontier work | Trace a coupled failure at score 15 when the dependency contracts are understood. |
 
 Use observed task difficulty to score the gates. File count, high stakes, broad context, and domain names are insufficient on their own. Recover tooling failures and gather missing context before reconsidering difficulty. The thresholds are policy heuristics. The historical benchmark predates these gates, and their quality and cost tradeoffs have yet to be measured.
 

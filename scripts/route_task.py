@@ -10,6 +10,12 @@ from dataclasses import dataclass, replace
 DIMENSIONS = ("scope", "reasoning", "ambiguity", "dependencies", "risk", "context")
 PHASES = ("triage", "analysis", "design", "implementation", "verification")
 EFFORTS = ("Low", "Medium", "High", "XHigh", "Max", "Ultra")
+WORKHORSE_MIN_SCORE = 5
+WORKHORSE_HIGH_MIN_SCORE = 12
+FRONTIER_MIN_SCORE = 15
+FRONTIER_XHIGH_MIN_SCORE = 17
+FRONTIER_MAX_MIN_SCORE = 19
+FRONTIER_ULTRA_MIN_SCORE = 21
 MODEL_PREFERENCES = {
     "Mechanical": ("gpt-6.1-terra", "gpt-6.2-sol"),
     "Scoped": ("gpt-6.1-terra", "gpt-6.2-sol"),
@@ -51,15 +57,15 @@ class RouteInput:
 
 
 def base_capability(score: int) -> str:
-    if score <= 5:
+    if score < WORKHORSE_MIN_SCORE:
         return "Mechanical"
-    if score <= 15:
+    if score < FRONTIER_MIN_SCORE:
         return "Workhorse"
     return "Frontier candidate"
 
 
 def frontier_eligible(task: RouteInput) -> bool:
-    direct = task.score >= 16 and task.reasoning >= 3 and (
+    direct = task.score >= FRONTIER_MIN_SCORE and task.reasoning >= 3 and (
         task.ambiguity >= 3 or task.dependencies >= 3
     )
     exceptional = task.frontier_justified and bool(task.frontier_evidence.strip()) and task.reasoning >= 3
@@ -107,13 +113,13 @@ def select_reasoning(task: RouteInput, capability: str, escalating: bool) -> str
         high_ambiguity = task.ambiguity >= 3
         high_dependencies = task.dependencies >= 3
         if task.reasoning == 4:
-            if score >= 22 and high_ambiguity and high_dependencies:
+            if score >= FRONTIER_ULTRA_MIN_SCORE and high_ambiguity and high_dependencies:
                 return "Ultra"
-            if score >= 20 and (high_ambiguity or high_dependencies):
+            if score >= FRONTIER_MAX_MIN_SCORE and (high_ambiguity or high_dependencies):
                 return "Max"
             if task.frontier_justified:
                 return "XHigh"
-        return "XHigh" if score >= 18 else "High"
+        return "XHigh" if score >= FRONTIER_XHIGH_MIN_SCORE else "High"
     if task.explicit_model in ("gpt-6.2-astra", "gpt-6-astra"):
         return "High"
     if capability == "Scoped":
@@ -122,7 +128,9 @@ def select_reasoning(task: RouteInput, capability: str, escalating: bool) -> str
         return "Medium" if task.reasoning >= 2 and not task.large_mechanical else "Low"
     if task.settled_plan and not task.small_difficult and not escalating:
         return "Medium"
-    return "High" if escalating or task.small_difficult or task.reasoning >= 3 or task.score >= 13 else "Medium"
+    if escalating or task.small_difficult or task.reasoning >= 3 or task.score >= WORKHORSE_HIGH_MIN_SCORE:
+        return "High"
+    return "Medium"
 
 
 def route_task(task: RouteInput) -> dict[str, object]:
@@ -139,11 +147,12 @@ def route_task(task: RouteInput) -> dict[str, object]:
     if not task.technical_execution:
         result.update(mode="skipped", action="answer informational request without routing")
         return result
-    capability = "Mechanical" if task.score <= 5 else "Workhorse"
+    capability = base_capability(task.score)
     if frontier_eligible(task):
         capability = "Frontier"
         notes.append("task scores or documented evidence meet the Frontier capability gate")
-    elif base_capability(task.score) == "Frontier candidate":
+    elif capability == "Frontier candidate":
+        capability = "Workhorse"
         notes.append("score alone does not justify Astra; use Workhorse High")
     if task.large_mechanical:
         capability = "Mechanical"
@@ -156,7 +165,11 @@ def route_task(task: RouteInput) -> dict[str, object]:
     elif task.bounded_verification and not task.small_difficult:
         capability = "Mechanical"
         notes.append("explicitly bounded verification uses the low tier")
-    if task.scoped_task and capability == "Workhorse" and task.score <= 12 and task.reasoning < 3 and task.risk < 3 and not task.small_difficult and not task.settled_plan and task.reasoning_failures < 2:
+    if (
+        task.scoped_task and capability == "Workhorse" and task.score < WORKHORSE_HIGH_MIN_SCORE
+        and task.reasoning < 3 and task.risk < 3 and not task.small_difficult
+        and not task.settled_plan and task.reasoning_failures < 2
+    ):
         capability = "Scoped"
         notes.append("well-defined scoped code fix or visual workflow uses the Scoped tier with verification")
     escalating = task.reasoning_failures >= 2 and not (task.execution_failure or task.missing_context)
@@ -218,32 +231,35 @@ def parse_args() -> argparse.Namespace:
 
 def run_self_test() -> None:
     ordinary = RouteInput(1, 2, 1, 1, 2, 1)
-    boundary = RouteInput(3, 3, 2, 3, 2, 3)  # 16, reasoning and dependencies gate
-    xhigh_boundary = replace(boundary, scope=4, context=4)  # 18
-    max_boundary = RouteInput(3, 4, 3, 3, 3, 4)  # 20
-    ultra_boundary = replace(max_boundary, scope=4, risk=4)  # 22
+    workhorse_high_boundary = RouteInput(2, 2, 2, 2, 2, 2)  # 12
+    boundary = RouteInput(2, 3, 2, 3, 2, 3)  # 15, reasoning and dependencies gate
+    xhigh_boundary = replace(boundary, scope=3, context=4)  # 17
+    max_boundary = RouteInput(3, 4, 3, 3, 3, 3)  # 19
+    ultra_boundary = replace(max_boundary, scope=4, risk=4)  # 21
     exceptional = RouteInput(
         0, 4, 2, 2, 2, 2, frontier_justified=True,
         frontier_evidence="a novel lock-free algorithm requires proving two interacting invariants",
     )
     cases = (
-        ("score 5", RouteInput(1, 1, 1, 1, 1, 0), "Mechanical", "gpt-6.1-terra", "Low"),
-        ("score 6", RouteInput(1, 1, 1, 1, 1, 1), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("score 4", RouteInput(1, 1, 1, 1, 0, 0), "Mechanical", "gpt-6.1-terra", "Low"),
+        ("score 5", RouteInput(1, 1, 1, 1, 1, 0), "Workhorse", "gpt-6.2-sol", "Medium"),
         ("ordinary", ordinary, "Workhorse", "gpt-6.2-sol", "Medium"),
-        ("score 12", RouteInput(2, 2, 2, 2, 2, 2), "Workhorse", "gpt-6.2-sol", "Medium"),
-        ("score 13", RouteInput(3, 2, 2, 2, 2, 2), "Workhorse", "gpt-6.2-sol", "High"),
-        ("score 15", replace(boundary, scope=2), "Workhorse", "gpt-6.2-sol", "High"),
-        ("score 16 direct", boundary, "Frontier", "gpt-6.2-astra", "High"),
-        ("ambiguity gate", RouteInput(3, 3, 3, 2, 2, 3), "Frontier", "gpt-6.2-astra", "High"),
+        ("score 11", replace(workhorse_high_boundary, scope=1), "Workhorse", "gpt-6.2-sol", "Medium"),
+        ("score 12", workhorse_high_boundary, "Workhorse", "gpt-6.2-sol", "High"),
+        ("score 14", replace(boundary, scope=1), "Workhorse", "gpt-6.2-sol", "High"),
+        ("score 15 direct", boundary, "Frontier", "gpt-6.2-astra", "High"),
+        ("ambiguity gate", replace(boundary, ambiguity=3, dependencies=2), "Frontier", "gpt-6.2-astra", "High"),
+        ("score 15 without Frontier reasoning", replace(boundary, scope=3, reasoning=2), "Workhorse", "gpt-6.2-sol", "High"),
+        ("score 15 without Frontier ambiguity or dependencies", replace(boundary, scope=3, dependencies=2), "Workhorse", "gpt-6.2-sol", "High"),
         ("high score low reasoning", RouteInput(4, 2, 4, 4, 4, 4), "Workhorse", "gpt-6.2-sol", "High"),
         ("high score bounded contracts", RouteInput(4, 4, 2, 2, 4, 4), "Workhorse", "gpt-6.2-sol", "High"),
-        ("score 17", replace(xhigh_boundary, scope=3), "Frontier", "gpt-6.2-astra", "High"),
-        ("score 17 with reasoning 4", replace(boundary, reasoning=4), "Frontier", "gpt-6.2-astra", "High"),
-        ("score 18", xhigh_boundary, "Frontier", "gpt-6.2-astra", "XHigh"),
-        ("score 19", replace(max_boundary, risk=2), "Frontier", "gpt-6.2-astra", "XHigh"),
-        ("score 20", max_boundary, "Frontier", "gpt-6.2-astra", "Max"),
-        ("score 21", replace(ultra_boundary, scope=3), "Frontier", "gpt-6.2-astra", "Max"),
-        ("score 22", ultra_boundary, "Frontier", "gpt-6.2-astra", "Ultra"),
+        ("score 16", replace(xhigh_boundary, scope=2), "Frontier", "gpt-6.2-astra", "High"),
+        ("score 16 with reasoning 4", replace(boundary, reasoning=4), "Frontier", "gpt-6.2-astra", "High"),
+        ("score 17", xhigh_boundary, "Frontier", "gpt-6.2-astra", "XHigh"),
+        ("score 18", replace(max_boundary, risk=2), "Frontier", "gpt-6.2-astra", "XHigh"),
+        ("score 19", max_boundary, "Frontier", "gpt-6.2-astra", "Max"),
+        ("score 20", replace(ultra_boundary, scope=3), "Frontier", "gpt-6.2-astra", "Max"),
+        ("score 21", ultra_boundary, "Frontier", "gpt-6.2-astra", "Ultra"),
         ("score 23 with reasoning 3", RouteInput(4, 3, 4, 4, 4, 4), "Frontier", "gpt-6.2-astra", "XHigh"),
         ("max score", RouteInput(4, 4, 4, 4, 4, 4), "Frontier", "gpt-6.2-astra", "Ultra"),
         ("Ultra needs ambiguity", replace(ultra_boundary, ambiguity=2, dependencies=4), "Frontier", "gpt-6.2-astra", "Max"),
@@ -271,8 +287,11 @@ def run_self_test() -> None:
         ("explicit effort", replace(boundary, explicit_reasoning="XHigh"), "Frontier", "gpt-6.2-astra", "XHigh"),
         ("explicit lower effort", replace(ultra_boundary, explicit_reasoning="Low", supported_reasoning={"gpt-6.2-astra": ("Low",)}), "Frontier", "gpt-6.2-astra", "Low"),
         ("explicit higher effort", replace(ordinary, explicit_reasoning="Ultra", supported_reasoning={"gpt-6.2-sol": ("Ultra",)}), "Workhorse", "gpt-6.2-sol", "Ultra"),
+        ("explicit model and effort at Frontier cutoff", replace(boundary, explicit_model="gpt-6.1-terra", explicit_reasoning="Medium"), "Frontier", "gpt-6.1-terra", "Medium"),
         ("Astra fallback", replace(boundary, available_models=("gpt-6.2-sol",)), "Frontier", "gpt-6.2-sol", "High"),
         ("scoped Terra", replace(ordinary, scoped_task=True), "Scoped", "gpt-6.1-terra", "Medium"),
+        ("scoped score 11", replace(workhorse_high_boundary, scope=1, scoped_task=True), "Scoped", "gpt-6.1-terra", "Medium"),
+        ("scoped score 12", replace(workhorse_high_boundary, scoped_task=True), "Workhorse", "gpt-6.2-sol", "High"),
         ("scoped fallback", replace(ordinary, scoped_task=True, available_models=("gpt-6.2-sol",)), "Scoped", "gpt-6.2-sol", "Medium"),
         ("scoped high risk", replace(ordinary, scoped_task=True, risk=3), "Workhorse", "gpt-6.2-sol", "Medium"),
         ("scoped escalation", replace(ordinary, scoped_task=True, reasoning_failures=2), "Workhorse", "gpt-6.2-sol", "High"),
